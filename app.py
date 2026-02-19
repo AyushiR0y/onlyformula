@@ -515,6 +515,43 @@ INSTRUCTIONS:
 9. For PAID_UP_INCOME_INSTALLMENT: Income_Benefit_Amount * Income_Benefit_Frequency is always used, along with no_of_premium_paid and PREMIUM_TERM
 10. Total Premium paid uses FULL_TERM_PREMIUM, no_of_premium_paid and BOOKING_FREQUENCY
 
+TABLE EXTRACTION GUIDELINES (CRITICAL FOR STRUCTURED DATA):
+11. **Tables and Merged Cells**: If the document contains tables:
+    - Look for MERGED ROWS or MERGED CELLS that act as category headers or group titles
+    - A merged cell/row typically spans multiple columns and contains a formula name or category
+    - Formulas may be listed in rows BELOW the merged header, with conditions in different columns
+    - Example table structure:
+      | Formula Name (merged across columns) | Condition 1 | Condition 2 | Condition 3 |
+      | Specific Case A                       | expr_A1     | expr_A2     | expr_A3     |
+      | Specific Case B                       | expr_B1     | expr_B2     | expr_B3     |
+    
+12. **Column Headers as Conditions**: 
+    - Column headers often represent CONDITIONS (e.g., "Year < 3", "Year 3-5", "Year > 5")
+    - If the target formula appears as a merged row header, extract formulas from cells below it
+    - Map each column header to its corresponding condition
+    - Combine row labels (left column) with column conditions if both exist
+    
+13. **Row Labels and Grouping**:
+    - First column often contains row labels that qualify the formula further
+    - Combine row labels with the merged title to understand the complete context
+    - Example: Merged title "GSV", Row label "If premium paid < 3 years" → GSV calculation for that condition
+    
+14. **Multiple Formula Variants in Tables**:
+    - A single formula name may have multiple variants based on table structure
+    - Look for patterns like: "Formula X (Case 1)", "Formula X (Case 2)" in rows
+    - Or conditions specified in column headers applying to different expressions
+    - Extract ALL variants and combine them using appropriate conditional logic
+    
+15. **Table Context Awareness**:
+    - Read table captions, notes, and legends - they often contain critical multipliers or factors
+    - Footer notes may specify default values, exceptions, or global conditions
+    - Adjacent cells may contain explanatory text that clarifies the formula
+    
+16. **Handling Table Fragments**:
+    - Tables may be split across chunks - look for continuation patterns
+    - If you see partial table structure, infer the pattern from visible rows
+    - Headers like "continued..." or "...cont'd" indicate table continuation
+
 MULTI-LEVEL & CONDITIONAL FORMULA HANDLING (CRITICAL):
 - If the formula has IF/ELSE conditions (e.g., "if policy_year < 3 then X else Y"), extract ALL branches
 - If the formula uses a tiered/stepped structure (e.g., different rates for different durations), list each tier
@@ -530,6 +567,24 @@ Examples:
 - "Sum Assured on Death is higher of SA, 10x AP or ROP" → "MAX(SUM_ASSURED, TEN_TIMES_AP, one_oh_five_percent_total_premium)"
 - Conditional: "PAID_UP_SA * SSV1_FACTOR if no_of_premium_paid >= 3 else 0"
 
+TABLE-BASED FORMULA EXAMPLES:
+- Table with merged header "GSV" and rows showing different policy years:
+  * Row 1: "Year < 3" | "0"
+  * Row 2: "Year 3-5" | "0.5 * TOTAL_PREMIUM_PAID * GSV_FACTOR"
+  * Row 3: "Year > 5" | "TOTAL_PREMIUM_PAID * GSV_FACTOR"
+  → Extract as: "0 if policy_year < 3 else (0.5 * TOTAL_PREMIUM_PAID * GSV_FACTOR if policy_year <= 5 else TOTAL_PREMIUM_PAID * GSV_FACTOR)"
+
+- Table with merged title "SURRENDER_VALUE" spanning columns with different product types:
+  * Column headers: "Product A" | "Product B" | "Product C"
+  * If searching for SURRENDER_VALUE and context matches Product A → extract from that column
+  
+- Table showing formulas with row groupings:
+  * Merged row: "Special Surrender Value (SSV)"
+  * Sub-row 1: "Component 1" | "PAID_UP_SA * SSV1_FACTOR"
+  * Sub-row 2: "Component 2" | "ROP * SSV2_FACTOR"
+  * Sub-row 3: "Component 3" | "PAID_UP_INCOME * SSV3_FACTOR"
+  * If searching for SSV → "SSV1 + SSV2 + SSV3" or "MAX(SSV1, SSV2, SSV3)" depending on table context
+
 RESPONSE FORMAT:
 FORMULA_EXPRESSION: [primary mathematical expression; if conditional, use Python-style if/else inline or multi-line]
 IS_CONDITIONAL: [YES or NO]
@@ -538,7 +593,7 @@ CONDITIONS:
 - CONDITION_2: [condition text e.g. "policy_year < 3"] | EXPRESSION_2: [formula when condition met]
 (Only fill CONDITIONS block if IS_CONDITIONAL is YES, otherwise leave blank)
 VARIABLES_USED: [comma-separated list]
-DOCUMENT_EVIDENCE: [exact or near-exact text passage from the document that supports this formula — quote it verbatim if possible, or write "INFERRED" if not explicit]
+DOCUMENT_EVIDENCE: [exact or near-exact text passage from the document that supports this formula — quote it verbatim if possible. If from a table, include: table title/caption, merged row header, column headers, and relevant cell values. Write "INFERRED" only if not explicit in document. Example: "From Table 3.2 'Surrender Values': Row header 'GSV' with columns 'Year<3: 0', 'Year 3-5: 0.5*Premium*Factor', 'Year>5: Premium*Factor'"]
 BUSINESS_CONTEXT: [brief explanation of what this formula calculates]
 
 Respond with only the requested format.
@@ -551,7 +606,7 @@ Respond with only the requested format.
                 response = client.chat.completions.create(
                     model=DEPLOYMENT_NAME,
                     messages=[{"role": "user", "content": prompt}],
-                    max_tokens=800,
+                    max_tokens=1200,
                     temperature=0.1,
                     top_p=0.95
                 )
@@ -664,7 +719,17 @@ def extract_text_from_file(file_bytes, file_extension):
                 tmp_file.write(file_bytes)
                 tmp_file_path = tmp_file.name
             try:
-                text = extract_text_from_pdf_lib(tmp_file_path)
+                # Use layout-aware extraction to better preserve table structure
+                from pdfminer.layout import LAParams
+                laparams = LAParams(
+                    line_margin=0.5,
+                    word_margin=0.1,
+                    char_margin=2.0,
+                    boxes_flow=0.5,
+                    detect_vertical=True,
+                    all_texts=False
+                )
+                text = extract_text_from_pdf_lib(tmp_file_path, laparams=laparams)
                 os.unlink(tmp_file_path)
                 return text
             except Exception as e:
@@ -677,7 +742,27 @@ def extract_text_from_file(file_bytes, file_extension):
                 import docx
                 from io import BytesIO
                 doc = docx.Document(BytesIO(file_bytes))
-                return '\n'.join([paragraph.text for paragraph in doc.paragraphs])
+                
+                # Extract both paragraphs and tables
+                full_text = []
+                for element in doc.element.body:
+                    if element.tag.endswith('p'):  # Paragraph
+                        para = next((p for p in doc.paragraphs if p._element == element), None)
+                        if para and para.text.strip():
+                            full_text.append(para.text)
+                    elif element.tag.endswith('tbl'):  # Table
+                        table = next((t for t in doc.tables if t._element == element), None)
+                        if table:
+                            full_text.append("\n--- TABLE START ---")
+                            for i, row in enumerate(table.rows):
+                                row_text = " | ".join(cell.text.strip() for cell in row.cells)
+                                if i == 0:
+                                    full_text.append(f"HEADER: {row_text}")
+                                else:
+                                    full_text.append(row_text)
+                            full_text.append("--- TABLE END ---\n")
+                
+                return '\n'.join(full_text)
             except ImportError:
                 st.error("File type not recognised or required library not installed.")
                 return ""
@@ -991,6 +1076,10 @@ def main():
 
     # ========== UPLOAD MODE SELECTOR ==========
     st.subheader("📂 Upload Product Documents")
+    
+    # Info about table handling
+    st.info("📊 **Enhanced Table Support**: This extractor now intelligently handles tables with merged cells, row/column headers, and grouped formulas. For best results, ensure tables in your documents have clear headers and structure.", icon="ℹ️")
+    
     mode_col1, mode_col2 = st.columns([2, 3])
     with mode_col1:
         upload_mode = st.radio(
