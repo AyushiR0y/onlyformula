@@ -784,6 +784,7 @@ def load_css(file_name="style.css"):
 def render_formula_card(formula: Dict, variant_name: str = None, highlight: bool = False, all_variants_formulas: Dict = None):
     """Render a single formula card with evidence and conditional display."""
     import html
+    import hashlib
     
     expr = formula.get("formula_expression", "")
     name = formula.get("formula_name", "")
@@ -795,6 +796,10 @@ def render_formula_card(formula: Dict, variant_name: str = None, highlight: bool
     # Escape all text that goes into HTML
     safe_name = html.escape(name)
     safe_context = html.escape(context) if context else ""
+    
+    # Create unique key for this formula card
+    variant_prefix = f"{variant_name}_" if variant_name else ""
+    unique_key = f"{variant_prefix}{name}_{hashlib.md5(expr.encode()).hexdigest()[:8]}"
     
     border_color = "#e74c3c" if highlight else "#3498db"
     badge = "<span style='background: #e74c3c; color: white; padding: 2px 8px; border-radius: 10px; font-size: 0.7rem; font-weight: 600; margin-left: 8px;'>⚠ DIFFERS</span>" if highlight else ""
@@ -830,7 +835,7 @@ def render_formula_card(formula: Dict, variant_name: str = None, highlight: bool
             
             if evidence and evidence not in ("No supporting evidence found", "No evidence found", "INFERRED"):
                 st.markdown("**Document Evidence:**")
-                st.text_area("Source", value=evidence, height=100, disabled=True, label_visibility="collapsed")
+                st.text_area("Source", value=evidence, height=100, disabled=True, label_visibility="collapsed", key=f"evidence_{unique_key}")
     
     st.markdown('<div style="height: 4px;"></div>', unsafe_allow_html=True)
 
