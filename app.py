@@ -432,31 +432,36 @@ def render_header():
             </div>
         </label>
     </div>
+    """, unsafe_allow_html=True)
+    
+    # Inject theme script using components
+    components.html("""
     <script>
     (function() {
-        if (window.FAITheme) return; // Already initialized
+        if (window.parent.FAITheme) return; // Already initialized
         
         const KEY = 'fai_theme';
+        const doc = window.parent.document;
         
         function apply(t) {
-            document.documentElement.setAttribute('data-theme', t);
-            document.body.setAttribute('data-theme', t);
-            const app = document.querySelector('[data-testid="stAppViewContainer"]');
+            doc.documentElement.setAttribute('data-theme', t);
+            doc.body.setAttribute('data-theme', t);
+            const app = doc.querySelector('[data-testid="stAppViewContainer"]');
             if (app) app.setAttribute('data-theme', t);
-            const main = document.querySelector('[data-testid="stMain"]');
+            const main = doc.querySelector('[data-testid="stMain"]');
             if (main) main.setAttribute('data-theme', t);
             
             if (t === 'light') {
-                document.body.style.backgroundColor = '#f8fafc';
+                doc.body.style.backgroundColor = '#f8fafc';
             } else {
-                document.body.style.backgroundColor = '#05070f';
+                doc.body.style.backgroundColor = '#05070f';
             }
         }
         
         const saved = localStorage.getItem(KEY) || 'dark';
         apply(saved);
         
-        window.FAITheme = {
+        window.parent.FAITheme = {
             get: () => localStorage.getItem(KEY) || 'dark',
             toggle: function() {
                 const next = (localStorage.getItem(KEY)||'dark') === 'dark' ? 'light' : 'dark';
@@ -468,21 +473,21 @@ def render_header():
         
         // Sync checkbox state
         setTimeout(function() {
-            const cb = document.getElementById('faiToggle');
-            if (cb && window.FAITheme) cb.checked = window.FAITheme.get() === 'light';
+            const cb = doc.getElementById('faiToggle');
+            if (cb && window.parent.FAITheme) cb.checked = window.parent.FAITheme.get() === 'light';
         }, 100);
         
         // Re-apply on changes
         const obs = new MutationObserver(() => {
             const t = localStorage.getItem(KEY) || 'dark';
-            if (document.documentElement.getAttribute('data-theme') !== t) {
+            if (doc.documentElement.getAttribute('data-theme') !== t) {
                 apply(t);
             }
         });
-        obs.observe(document.body, {childList: true, subtree: true});
+        obs.observe(doc.body, {childList: true, subtree: true});
     })();
     </script>
-    """, unsafe_allow_html=True)
+    """, height=0, width=0, scrolling=False)
 
 
 def section_header(icon, title, subtitle=""):
