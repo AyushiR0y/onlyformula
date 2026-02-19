@@ -1483,20 +1483,6 @@ def main():
                         })
                 st.download_button("📥 CSV (Full)", data=pd.DataFrame(flat_rows).to_csv(index=False), file_name="formula_comparison.csv", mime="text/csv", use_container_width=True)
 
-    # ========== PROCEED TO NEXT STEP ==========
-    if (st.session_state.mode == 'single' and st.session_state.extraction_result and st.session_state.formulas) or \
-       (st.session_state.mode == 'multi' and st.session_state.extraction_result and st.session_state.variant_results):
-        st.markdown("---")
-        st.markdown("""<div style="background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); padding: 16px 24px; border-radius: 10px; margin: 20px 0; text-align: center;">
-            <h3 style="color: white; margin: 0 0 8px 0; font-size: 1.2rem;">✅ Formulas Extracted Successfully!</h3>
-            <p style="color: rgba(255,255,255,0.95); margin: 0; font-size: 0.95rem;">Ready to proceed to the next step</p>
-        </div>""", unsafe_allow_html=True)
-        
-        col_proceed1, col_proceed2, col_proceed3 = st.columns([1, 2, 1])
-        with col_proceed2:
-            if st.button("➡️ Proceed to Variable Mapping", type="primary", use_container_width=True, key="proceed_to_mapping"):
-                st.switch_page("pages/2_Variable_Mapping.py")
-
     st.markdown("---")
     st.markdown(
         """<div style="text-align: center; margin-top: 30px; color: #7f8c8d; font-size: 0.9em;">
