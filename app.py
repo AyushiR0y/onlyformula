@@ -783,6 +783,8 @@ def load_css(file_name="style.css"):
 
 def render_formula_card(formula: Dict, variant_name: str = None, highlight: bool = False, all_variants_formulas: Dict = None):
     """Render a single formula card with evidence and conditional display."""
+    import html
+    
     expr = formula.get("formula_expression", "")
     name = formula.get("formula_name", "")
     evidence = formula.get("document_evidence", "")
@@ -790,46 +792,53 @@ def render_formula_card(formula: Dict, variant_name: str = None, highlight: bool
     is_conditional = formula.get("is_conditional", False)
     conditions = formula.get("conditions") or []
 
-    border_color = "#e74c3c" if highlight else "#dee2e6"
-    bg_color = "#fff8f8" if highlight else "#ffffff"
-    diff_badge = "🔴 **DIFFERS ACROSS VARIANTS**" if highlight else ""
-
+    border_color = "#e74c3c" if highlight else "#3498db"
+    bg_color = "#fff8f8" if highlight else "#f8f9fa"
+    
     with st.container():
         st.markdown(f"""
-        <div style="border: 2px solid {border_color}; border-radius: 8px; padding: 16px; margin-bottom: 12px; background: {bg_color};">
-            <div style="font-weight: 700; font-size: 1rem; color: #2c3e50; margin-bottom: 6px;">
-                {name}
-                {"&nbsp;&nbsp;<span style='color:#e74c3c; font-size:0.8rem;'>⚠ Differs across variants</span>" if highlight else ""}
+        <div style="border-left: 4px solid {border_color}; border-radius: 6px; padding: 18px; margin-bottom: 16px; background: {bg_color}; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+                <div style="font-weight: 700; font-size: 1.1rem; color: #2c3e50;">
+                    {name}
+                </div>
+                {"<div style='background: #e74c3c; color: white; padding: 4px 12px; border-radius: 12px; font-size: 0.75rem; font-weight: 600;'>⚠ DIFFERS</div>" if highlight else ""}
             </div>
         </div>
         """, unsafe_allow_html=True)
 
         # Formula expression
+        st.markdown("**Formula Expression:**")
         st.code(expr, language="python")
 
         # Conditional breakdown
         if is_conditional and conditions:
-            with st.expander("📊 Conditional Breakdown", expanded=True):
+            with st.expander("📊 Conditional Breakdown", expanded=False):
+                st.markdown("This formula has multiple branches based on conditions:")
                 for idx, cond in enumerate(conditions):
-                    st.markdown(f"**Branch {idx+1}** — `{cond.get('condition','')}`")
+                    st.markdown(f"**Branch {idx+1}:** `{cond.get('condition','')}`")
                     st.code(cond.get('expression', ''), language="python")
+                    if idx < len(conditions) - 1:
+                        st.markdown("---")
 
         # Business context
         if context and context != f"Calculation for {name}":
-            st.caption(f"💡 {context}")
+            st.markdown(f"**💡 Context:** {context}")
 
-        # Document evidence
+        # Document evidence - FIX: Escape HTML to prevent tags from showing
         if evidence and evidence not in ("No supporting evidence found", "No evidence found", "INFERRED"):
             with st.expander("📄 Document Evidence (Source Text)", expanded=False):
+                # Escape HTML characters to prevent them from rendering
+                escaped_evidence = html.escape(evidence)
                 st.markdown(f"""
-                <div style="background: #f8f9fa; border-left: 4px solid #3498db; padding: 10px 14px; border-radius: 4px; font-size: 0.88rem; color: #34495e; font-style: italic;">
-                {evidence}
+                <div style="background: #ffffff; border: 1px solid #e0e0e0; border-left: 4px solid #3498db; padding: 12px 16px; border-radius: 4px; font-size: 0.88rem; color: #2c3e50; font-family: monospace; white-space: pre-wrap; line-height: 1.6;">
+                {escaped_evidence}
                 </div>
                 """, unsafe_allow_html=True)
         elif evidence in ("INFERRED",):
             st.caption("⚠️ Formula inferred — no explicit document text found")
 
-        st.markdown("---")
+        st.markdown('<div style="height: 8px;"></div>', unsafe_allow_html=True)
 
 
 def run_extraction_for_variant(variant_name: str, uploaded_files: list, target_outputs: List[str], input_variables: Dict[str, str]) -> Optional[List[Dict]]:
@@ -1227,12 +1236,27 @@ def main():
     if st.session_state.mode == 'single' and st.session_state.extraction_result and st.session_state.formulas:
         formulas = st.session_state.formulas
 
-        st.subheader("📋 Extracted Formulas")
-        st.markdown(f"**{len(formulas)}** formulas extracted. Review, edit, or export below.")
+        st.markdown("""<div style="padding: 16px 0;"></div>""", unsafe_allow_html=True)
+        st.markdown("""<div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 20px; border-radius: 10px; margin-bottom: 24px;">
+            <h2 style="color: white; margin: 0; font-size: 1.8rem;">📋 Extracted Formulas</h2>
+            <p style="color: rgba(255,255,255,0.9); margin: 8px 0 0 0; font-size: 1rem;">Review, edit, or export your formulas below</p>
+        </div>""", unsafe_allow_html=True)
+        
+        # Stats bar
+        col_stat1, col_stat2, col_stat3 = st.columns(3)
+        with col_stat1:
+            st.metric("Total Formulas", len(formulas))
+        with col_stat2:
+            conditional_count = sum(1 for f in formulas if f.get('is_conditional', False))
+            st.metric("Conditional Formulas", conditional_count)
+        with col_stat3:
+            with_evidence = sum(1 for f in formulas if f.get('document_evidence', '') not in ('', 'INFERRED', 'No evidence found', 'No supporting evidence found'))
+            st.metric("With Evidence", with_evidence)
 
-        tab_view, tab_edit = st.tabs(["👁 View with Evidence", "✏️ Edit Formulas"])
+        tab_view, tab_edit = st.tabs(["👁️ View with Evidence", "✏️ Edit Formulas"])
 
         with tab_view:
+            st.markdown('<div style="padding-top: 16px;"></div>', unsafe_allow_html=True)
             for formula in formulas:
                 render_formula_card(formula)
 
@@ -1302,14 +1326,18 @@ def main():
                         st.rerun()
 
         st.markdown("---")
-        st.subheader("⬇️ Export")
+        st.markdown("""<div style="background: #e3f2fd; border-left: 4px solid #2196f3; padding: 16px; border-radius: 6px;">
+            <h3 style="margin: 0; color: #1565c0; font-size: 1.3rem;">⬇️ Export Formulas</h3>
+        </div>""", unsafe_allow_html=True)
+        st.markdown('<div style="padding: 12px 0;"></div>', unsafe_allow_html=True)
+        
         export_data = {"total_formulas": len(st.session_state.formulas), "formulas": st.session_state.formulas}
         col_exp1, col_exp2 = st.columns(2)
         with col_exp1:
-            st.download_button("Download as JSON", data=json.dumps(export_data, indent=2), file_name="extracted_formulas.json", mime="application/json")
+            st.download_button("📥 Download as JSON", data=json.dumps(export_data, indent=2), file_name="extracted_formulas.json", mime="application/json", use_container_width=True)
         with col_exp2:
             csv_data = pd.DataFrame([{"Formula Name": f.get("formula_name",""), "Expression": f.get("formula_expression","")} for f in st.session_state.formulas]).to_csv(index=False)
-            st.download_button("Download as CSV", data=csv_data, file_name="extracted_formulas.csv", mime="text/csv")
+            st.download_button("📥 Download as CSV", data=csv_data, file_name="extracted_formulas.csv", mime="text/csv", use_container_width=True)
 
     # ========== RESULTS: MULTI-VARIANT MODE ==========
     elif st.session_state.mode == 'multi' and st.session_state.extraction_result and st.session_state.variant_results:
@@ -1319,8 +1347,11 @@ def main():
         if not variant_names:
             st.warning("No variant results available.")
         else:
-            st.subheader("📊 Multi-Variant Formula Comparison")
-            st.markdown(f"Comparing **{len(variant_names)}** variants. Formulas that differ across variants are highlighted in red.")
+            st.markdown("""<div style="padding: 16px 0;"></div>""", unsafe_allow_html=True)
+            st.markdown("""<div style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); padding: 20px; border-radius: 10px; margin-bottom: 24px;">
+                <h2 style="color: white; margin: 0; font-size: 1.8rem;">📊 Multi-Variant Formula Comparison</h2>
+                <p style="color: rgba(255,255,255,0.95); margin: 8px 0 0 0; font-size: 1rem;">Comparing <strong>{len(variant_names)}</strong> product variants</p>
+            </div>""", unsafe_allow_html=True)
 
             # --- COMPARISON TABLE ---
             with st.expander("🔍 Side-by-Side Comparison Table", expanded=True):
@@ -1388,7 +1419,10 @@ def main():
 
             # --- DIFF SUMMARY ---
             st.markdown("---")
-            st.subheader("🔴 Differences Summary")
+            st.markdown("""<div style="background: #fff3cd; border-left: 4px solid #ffc107; padding: 16px; border-radius: 6px; margin: 20px 0;">
+                <h3 style="margin: 0 0 8px 0; color: #856404; font-size: 1.3rem;">🔴 Differences Summary</h3>
+            </div>""", unsafe_allow_html=True)
+            
             if differing_formulas:
                 st.markdown(f"**{len(differing_formulas)}** formula(s) differ across variants:")
                 for fn in sorted(differing_formulas):
@@ -1409,7 +1443,11 @@ def main():
 
             # --- EXPORT ---
             st.markdown("---")
-            st.subheader("⬇️ Export")
+            st.markdown("""<div style="background: #e3f2fd; border-left: 4px solid #2196f3; padding: 16px; border-radius: 6px;">
+                <h3 style="margin: 0; color: #1565c0; font-size: 1.3rem;">⬇️ Export Comparison</h3>
+            </div>""", unsafe_allow_html=True)
+            st.markdown('<div style="padding: 12px 0;"></div>', unsafe_allow_html=True)
+            
             export_all = {
                 "variants": variant_names,
                 "differing_formulas": list(differing_formulas),
@@ -1417,7 +1455,7 @@ def main():
             }
             col_e1, col_e2 = st.columns(2)
             with col_e1:
-                st.download_button("Download All Variants (JSON)", data=json.dumps(export_all, indent=2, default=str), file_name="multi_variant_formulas.json", mime="application/json")
+                st.download_button("📥 Download All Variants (JSON)", data=json.dumps(export_all, indent=2, default=str), file_name="multi_variant_formulas.json", mime="application/json", use_container_width=True)
             with col_e2:
                 # Flat CSV with variant column
                 flat_rows = []
@@ -1430,7 +1468,7 @@ def main():
                             "Is Conditional": f.get("is_conditional", False),
                             "Differs": f.get("formula_name", "") in differing_formulas,
                         })
-                st.download_button("Download Comparison CSV", data=pd.DataFrame(flat_rows).to_csv(index=False), file_name="formula_comparison.csv", mime="text/csv")
+                st.download_button("📥 Download Comparison CSV", data=pd.DataFrame(flat_rows).to_csv(index=False), file_name="formula_comparison.csv", mime="text/csv", use_container_width=True)
 
     st.markdown("---")
     st.markdown(
