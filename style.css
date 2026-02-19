@@ -105,10 +105,7 @@
 *, *::before, *::after { box-sizing: border-box; }
 
 /* Hide zero-height component iframes and their containers - AGGRESSIVE MODE */
-iframe[height="0"],
-iframe[width="0"],
-iframe[height="0"][width="0"] {
-  display: none !important;
+iframe[height="0"] {
   position: absolute !important;
   width: 0 !important;
   height: 0 !important;
@@ -121,17 +118,11 @@ iframe[height="0"][width="0"] {
   opacity: 0 !important;
   pointer-events: none !important;
   visibility: hidden !important;
-  z-index: -9999 !important;
 }
 
 /* Hide streamlit component containers */
 [data-testid="stVerticalBlock"] > div:has(iframe[height="0"]),
-[data-testid="stVerticalBlock"] > div:has(iframe[width="0"]),
-.stMarkdown:has(iframe[height="0"]),
-.stMarkdown:has(iframe[width="0"]),
-div.stHtml:has(iframe[height="0"]),
-div.stHtml:has(iframe[width="0"]) {
-  display: none !important;
+.stMarkdown:has(iframe[height="0"]) {
   position: absolute !important;
   width: 0 !important;
   height: 0 !important;
@@ -142,7 +133,6 @@ div.stHtml:has(iframe[width="0"]) {
   overflow: hidden !important;
   opacity: 0 !important;
   visibility: hidden !important;
-  z-index: -9999 !important;
 }
 
 /* Ensure header container is always visible */
@@ -155,7 +145,6 @@ div.stHtml:has(iframe[width="0"]) {
   height: auto !important;
   opacity: 1 !important;
   visibility: visible !important;
-  z-index: 100 !important;
 }
 
 html, body {
@@ -163,17 +152,6 @@ html, body {
   background: var(--bg-base) !important;
   color: var(--text-primary) !important;
   transition: background 0.4s ease, color 0.4s ease;
-  overflow-x: hidden;
-}
-
-/* Hide component wrappers more aggressively */
-div[class*="st"]:empty,
-div:has(> iframe:only-child[height="0"]),
-div:has(> iframe:only-child[width="0"]) {
-  display: none !important;
-  height: 0 !important;
-  margin: 0 !important;
-  padding: 0 !important;
 }
 
 /* Override every streamlit surface */
@@ -191,8 +169,6 @@ section[data-testid="stSidebar"],
 .block-container {
   padding-top: 0 !important;
   max-width: 1200px;
-  position: relative !important;
-  overflow: visible !important;
 }
 
 /* ══════════════════════════════════════════
@@ -239,7 +215,6 @@ section[data-testid="stSidebar"],
 [data-testid="stMain"] {
   position: relative;
   z-index: 1;
-  overflow: visible !important;
 }
 
 /* ══════════════════════════════════════════
