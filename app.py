@@ -811,7 +811,7 @@ def run_extraction_for_variant(variant_name: str, uploaded_files: list, target_o
 
 def main():
     st.set_page_config(
-        page_title="Formula AI",
+        page_title="Document Formula Extractor",
         page_icon="🧮",
         layout="wide",
         initial_sidebar_state="expanded"
@@ -843,7 +843,7 @@ def main():
         ('previous_selected_variables', DEFAULT_TARGET_OUTPUT_VARIABLES.copy()),
         ('variant_results', {}),      # {variant_name: List[Dict]}
         ('num_variants', 2),
-        ('variant_names', ['Product A', 'Product B']),
+        ('variant_names', ['Product A']),
         ('mode', 'single'),           # 'single' or 'multi'
     ]:
         if key not in st.session_state:
