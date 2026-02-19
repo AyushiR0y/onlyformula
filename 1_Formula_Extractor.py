@@ -1235,10 +1235,22 @@ def main():
     if st.session_state.mode == 'single' and st.session_state.extraction_result and st.session_state.formulas:
         formulas = st.session_state.formulas
 
-        # Compact header
-        st.markdown("""<div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 12px 20px; border-radius: 8px; margin: 16px 0;">
-            <h3 style="color: white; margin: 0; font-size: 1.3rem;">📋 Extracted Formulas ({len(formulas)})</h3>
-        </div>""", unsafe_allow_html=True)
+        st.markdown(
+            f"""
+            <div style="
+                background: linear-gradient(135deg, #6ec6ff 0%, #005eac 100%);
+                padding: 12px 20px;
+                border-radius: 8px;
+                margin: 16px 0;
+            ">
+                <h3 style="color: white; margin: 0; font-size: 1.3rem;">
+                    📋 Extracted Formulas ({len(formulas)})
+                </h3>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+
         
         # Compact stats in single line
         col_stat1, col_stat2, col_stat3, col_stat4 = st.columns(4)
@@ -1482,6 +1494,17 @@ def main():
                             "Differs": f.get("formula_name", "") in differing_formulas,
                         })
                 st.download_button("📥 CSV (Full)", data=pd.DataFrame(flat_rows).to_csv(index=False), file_name="formula_comparison.csv", mime="text/csv", use_container_width=True)
+
+    # ========== PROCEED TO NEXT STEP ==========
+    if (st.session_state.mode == 'single' and st.session_state.extraction_result and st.session_state.formulas) or \
+       (st.session_state.mode == 'multi' and st.session_state.extraction_result and st.session_state.variant_results):
+        st.markdown("---")
+
+        
+        col_proceed1, col_proceed2, col_proceed3 = st.columns([1, 2, 1])
+        with col_proceed2:
+            if st.button("➡️ Proceed to Variable Mapping", type="primary", use_container_width=True, key="proceed_to_mapping"):
+                st.switch_page("pages/2_Variable_Mapping.py")
 
     st.markdown("---")
     st.markdown(
