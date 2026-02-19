@@ -827,7 +827,7 @@ def main():
     col_back1, col_back2, col_back3 = st.columns([1, 4, 1])
     with col_back1:
         if st.button("⬅️ Back to Formula Extractor", use_container_width=True):
-            st.switch_page("app.py")
+            st.switch_page("1_Formula_Extractor.py")
     
     # Initialize session state
     if 'formulas' not in st.session_state:
