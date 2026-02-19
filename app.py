@@ -158,9 +158,13 @@ def extract_formulas_cached(
     text: str,
     target_outputs: List[str],
     chunk_size: int,
-    chunk_overlap: int
+    chunk_overlap: int,
+    input_variables: Dict[str, str]
 ) -> Dict:
-    extractor = StableChunkedDocumentFormulaExtractor(target_outputs=target_outputs)
+    extractor = StableChunkedDocumentFormulaExtractor(
+        target_outputs=target_outputs,
+        input_variables=input_variables
+    )
     result = extractor.extract_formulas_from_document(text)
     return {
         'input_variables': result.input_variables,
@@ -252,8 +256,8 @@ def build_formula_comparison_table(all_variant_formulas: Dict[str, List[Dict]], 
 class StableChunkedDocumentFormulaExtractor:
     """Extracts formulas from large documents using stable chunking ratios"""
 
-    def __init__(self, target_outputs: List[str]):
-        self.input_variables = INPUT_VARIABLES
+    def __init__(self, target_outputs: List[str], input_variables: Dict[str, str] = None):
+        self.input_variables = input_variables if input_variables is not None else INPUT_VARIABLES
         self.basic_derived = BASIC_DERIVED_FORMULAS
         self.target_outputs = target_outputs
         self.config = STABLE_CHUNK_CONFIG
@@ -743,7 +747,7 @@ def render_formula_card(formula: Dict, variant_name: str = None, highlight: bool
         st.markdown("---")
 
 
-def run_extraction_for_variant(variant_name: str, uploaded_files: list, target_outputs: List[str]) -> Optional[List[Dict]]:
+def run_extraction_for_variant(variant_name: str, uploaded_files: list, target_outputs: List[str], input_variables: Dict[str, str]) -> Optional[List[Dict]]:
     """Run extraction for a single variant from one or more uploaded files."""
     if not uploaded_files:
         return None
@@ -769,7 +773,8 @@ def run_extraction_for_variant(variant_name: str, uploaded_files: list, target_o
                 text=combined_text,
                 target_outputs=target_outputs,
                 chunk_size=STABLE_CHUNK_CONFIG['chunk_size'],
-                chunk_overlap=STABLE_CHUNK_CONFIG['chunk_overlap']
+                chunk_overlap=STABLE_CHUNK_CONFIG['chunk_overlap'],
+                input_variables=input_variables
             )
             extracted_formulas = [
                 ExtractedFormula(
@@ -787,7 +792,10 @@ def run_extraction_for_variant(variant_name: str, uploaded_files: list, target_o
             ]
             extracted_formulas = normalize_extracted_formulas(extracted_formulas)
         except Exception:
-            extractor = StableChunkedDocumentFormulaExtractor(target_outputs=target_outputs)
+            extractor = StableChunkedDocumentFormulaExtractor(
+                target_outputs=target_outputs,
+                input_variables=input_variables
+            )
             result = extractor.extract_formulas_from_document(combined_text)
             extracted_formulas = normalize_extracted_formulas(result.extracted_formulas)
 
@@ -845,6 +853,8 @@ def main():
         ('num_variants', 2),
         ('variant_names', ['Product A']),
         ('mode', 'single'),           # 'single' or 'multi'
+        ('custom_input_variables', INPUT_VARIABLES.copy()),  # User-customizable input variables
+        ('editing_input_var', None),  # Variable name being edited
     ]:
         if key not in st.session_state:
             st.session_state[key] = default
@@ -904,8 +914,69 @@ def main():
     with col2:
         st.subheader("Reference Variables")
         with st.expander("Input Variables (Policy Parameters)", expanded=False):
-            input_data = [{"Variable": name, "Description": desc} for name, desc in INPUT_VARIABLES.items()]
-            st.dataframe(pd.DataFrame(input_data), use_container_width=True, hide_index=True)
+            st.markdown("**Manage Input Variables** - Edit or add custom variables below.")
+            
+            # Display existing input variables with edit/delete options
+            for var_name, var_desc in sorted(st.session_state.custom_input_variables.items()):
+                var_col1, var_col2, var_col3, var_col4 = st.columns([2, 4, 1, 1])
+                
+                with var_col1:
+                    if st.session_state.editing_input_var == var_name:
+                        new_var_name = st.text_input("Name", value=var_name, key=f"edit_name_{var_name}", label_visibility="collapsed")
+                    else:
+                        st.markdown(f"**{var_name}**")
+                
+                with var_col2:
+                    if st.session_state.editing_input_var == var_name:
+                        new_var_desc = st.text_input("Description", value=var_desc, key=f"edit_desc_{var_name}", label_visibility="collapsed")
+                    else:
+                        st.markdown(f"_{var_desc}_")
+                
+                with var_col3:
+                    if st.session_state.editing_input_var == var_name:
+                        if st.button("💾", key=f"save_{var_name}", help="Save changes"):
+                            if new_var_name.strip():
+                                # Remove old entry and add new one
+                                if new_var_name != var_name:
+                                    del st.session_state.custom_input_variables[var_name]
+                                st.session_state.custom_input_variables[new_var_name.strip()] = new_var_desc.strip()
+                                st.session_state.editing_input_var = None
+                                st.rerun()
+                    else:
+                        if st.button("✏️", key=f"edit_btn_{var_name}", help="Edit variable"):
+                            st.session_state.editing_input_var = var_name
+                            st.rerun()
+                
+                with var_col4:
+                    if st.session_state.editing_input_var == var_name:
+                        if st.button("❌", key=f"cancel_{var_name}", help="Cancel"):
+                            st.session_state.editing_input_var = None
+                            st.rerun()
+                    else:
+                        if st.button("🗑️", key=f"delete_{var_name}", help="Delete variable"):
+                            del st.session_state.custom_input_variables[var_name]
+                            st.rerun()
+            
+            # Add new input variable section
+            st.markdown("---")
+            st.markdown("**Add New Input Variable**")
+            new_iv_col1, new_iv_col2, new_iv_col3 = st.columns([2, 4, 1])
+            
+            with new_iv_col1:
+                new_input_var_name = st.text_input("Variable Name", key="new_input_var_name", placeholder="e.g., POLICY_TERM", label_visibility="collapsed")
+            
+            with new_iv_col2:
+                new_input_var_desc = st.text_input("Description", key="new_input_var_desc", placeholder="Description of the variable", label_visibility="collapsed")
+            
+            with new_iv_col3:
+                if st.button("➕ Add", key="add_input_var_btn"):
+                    if new_input_var_name.strip():
+                        st.session_state.custom_input_variables[new_input_var_name.strip()] = new_input_var_desc.strip()
+                        st.success(f"Added '{new_input_var_name.strip()}'")
+                        st.rerun()
+                    else:
+                        st.warning("Please enter a variable name")
+        
         with st.expander("Basic Derived Formulas (Pre-computed)", expanded=False):
             derived_data = [{"Variable": name, "Description": desc} for name, desc in BASIC_DERIVED_FORMULAS.items()]
             st.dataframe(pd.DataFrame(derived_data), use_container_width=True, hide_index=True)
@@ -962,7 +1033,12 @@ def main():
                     st.warning("Please select at least one target formula.")
                 else:
                     with st.spinner("Extracting formulas..."):
-                        formulas = run_extraction_for_variant("default", uploaded_files, st.session_state.selected_output_variables)
+                        formulas = run_extraction_for_variant(
+                            "default",
+                            uploaded_files,
+                            st.session_state.selected_output_variables,
+                            st.session_state.custom_input_variables
+                        )
                     if formulas is not None:
                         st.session_state.formulas = formulas
                         st.session_state.extraction_result = True
@@ -1044,7 +1120,12 @@ def main():
                     files = variant_files.get(v_name, [])
                     if files:
                         st.markdown(f"#### 🔍 Extracting formulas for **{v_name}**...")
-                        formulas = run_extraction_for_variant(v_name, files, st.session_state.selected_output_variables)
+                        formulas = run_extraction_for_variant(
+                            v_name,
+                            files,
+                            st.session_state.selected_output_variables,
+                            st.session_state.custom_input_variables
+                        )
                         if formulas is not None:
                             st.session_state.variant_results[v_name] = formulas
                             st.success(f"✅ {v_name}: {len(formulas)} formulas extracted")
