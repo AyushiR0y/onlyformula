@@ -833,25 +833,41 @@ def main():
     (function() {
         const KEY = 'fai_theme';
         function apply(t) {
+            // Apply theme to all relevant elements
             document.documentElement.setAttribute('data-theme', t);
+            document.body.setAttribute('data-theme', t);
             const app = document.querySelector('[data-testid="stAppViewContainer"]');
             if (app) app.setAttribute('data-theme', t);
             const main = document.querySelector('[data-testid="stMain"]');
             if (main) main.setAttribute('data-theme', t);
+            
+            // Force background color update
+            if (t === 'light') {
+                document.body.style.backgroundColor = '#f8fafc';
+            } else {
+                document.body.style.backgroundColor = '#05070f';
+            }
         }
+        
         const saved = localStorage.getItem(KEY) || 'dark';
         apply(saved);
+        
         window.FAITheme = {
             get: () => localStorage.getItem(KEY) || 'dark',
             toggle: function() {
                 const next = (localStorage.getItem(KEY)||'dark') === 'dark' ? 'light' : 'dark';
-                localStorage.setItem(KEY, next); apply(next); return next;
+                localStorage.setItem(KEY, next); 
+                apply(next); 
+                return next;
             }
         };
+        
         // Re-apply after Streamlit rerenders
         const obs = new MutationObserver(() => {
             const t = localStorage.getItem(KEY) || 'dark';
-            if (document.documentElement.getAttribute('data-theme') !== t) apply(t);
+            if (document.documentElement.getAttribute('data-theme') !== t) {
+                apply(t);
+            }
         });
         obs.observe(document.body, {childList: true, subtree: true});
         

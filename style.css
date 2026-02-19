@@ -1,9 +1,9 @@
 /* ═══════════════════════════════════════════════════════════════
-   FORMULA AI — Futuristic Glassmorphic UI
-   Fonts: Syne (display) + JetBrains Mono (code) + Outfit (body)
+   FORMULA AI — Professional Glassmorphic UI
+   Fonts: Inter (primary) + JetBrains Mono (code)
    ═══════════════════════════════════════════════════════════════ */
 
-@import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=JetBrains+Mono:wght@300;400;500;600&family=Outfit:wght@300;400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@300;400;500;600&display=swap');
 
 /* ── Dark Mode Variables (default) ── */
 :root,
@@ -54,48 +54,48 @@
 
 /* ── Light Mode Variables ── */
 [data-theme="light"] {
-  --bg-base:         #eef3ff;
-  --bg-deep:         #e4ecff;
-  --bg-mesh-1:       rgba(100, 160, 255, 0.15);
-  --bg-mesh-2:       rgba(0, 180, 230, 0.10);
-  --bg-mesh-3:       rgba(120, 80, 220, 0.08);
+  --bg-base:         #f8fafc;
+  --bg-deep:         #f1f5f9;
+  --bg-mesh-1:       rgba(0, 94, 172, 0.08);
+  --bg-mesh-2:       rgba(0, 120, 215, 0.05);
+  --bg-mesh-3:       rgba(0, 94, 172, 0.03);
 
-  --glass-bg:        rgba(255, 255, 255, 0.55);
-  --glass-bg-hover:  rgba(255, 255, 255, 0.75);
-  --glass-border:    rgba(100, 160, 255, 0.30);
-  --glass-border-hover: rgba(60, 140, 255, 0.60);
-  --glass-shadow:    0 8px 32px rgba(80, 130, 255, 0.12), 0 2px 8px rgba(100,140,255,0.1);
-  --glass-shadow-hover: 0 16px 48px rgba(60, 120, 255, 0.22), 0 4px 16px rgba(80,130,255,0.15);
-  --glass-blur:      16px;
-  --glass-shine:     linear-gradient(135deg, rgba(255,255,255,0.6) 0%, transparent 60%);
+  --glass-bg:        rgba(255, 255, 255, 0.85);
+  --glass-bg-hover:  rgba(255, 255, 255, 0.95);
+  --glass-border:    rgba(0, 94, 172, 0.20);
+  --glass-border-hover: rgba(0, 94, 172, 0.40);
+  --glass-shadow:    0 4px 24px rgba(0, 94, 172, 0.08), 0 2px 8px rgba(0, 94, 172, 0.04);
+  --glass-shadow-hover: 0 8px 32px rgba(0, 94, 172, 0.12), 0 4px 16px rgba(0, 94, 172, 0.08);
+  --glass-blur:      20px;
+  --glass-shine:     linear-gradient(135deg, rgba(255,255,255,0.8) 0%, transparent 60%);
 
-  --accent:          #2070e0;
-  --accent-2:        #0099cc;
-  --accent-3:        #6040b0;
-  --accent-glow:     rgba(32, 112, 224, 0.25);
-  --accent-glow-2:   rgba(0, 153, 204, 0.2);
+  --accent:          #005eac;
+  --accent-2:        #0078d4;
+  --accent-3:        #004578;
+  --accent-glow:     rgba(0, 94, 172, 0.20);
+  --accent-glow-2:   rgba(0, 120, 212, 0.15);
 
-  --danger:          #e03050;
-  --danger-dim:      rgba(224, 48, 80, 0.10);
-  --danger-border:   rgba(224, 48, 80, 0.30);
-  --success:         #00b880;
-  --success-dim:     rgba(0, 184, 128, 0.10);
-  --warning:         #e09020;
+  --danger:          #d13438;
+  --danger-dim:      rgba(209, 52, 56, 0.08);
+  --danger-border:   rgba(209, 52, 56, 0.25);
+  --success:         #107c10;
+  --success-dim:     rgba(16, 124, 16, 0.08);
+  --warning:         #ca5010;
 
-  --text-primary:    #0a1840;
-  --text-secondary:  #2a4880;
-  --text-dim:        #7090c0;
-  --text-code:       #1050b0;
+  --text-primary:    #1a1a1a;
+  --text-secondary:  #424242;
+  --text-dim:        #6e6e6e;
+  --text-code:       #005eac;
 
-  --grid-color:      rgba(80, 130, 255, 0.10);
-  --grid-color-2:    rgba(80, 130, 255, 0.05);
+  --grid-color:      rgba(0, 94, 172, 0.06);
+  --grid-color-2:    rgba(0, 94, 172, 0.03);
 
-  --shimmer-1:       rgba(100, 160, 255, 0.0);
-  --shimmer-2:       rgba(100, 160, 255, 0.25);
-  --shimmer-3:       rgba(100, 160, 255, 0.0);
+  --shimmer-1:       rgba(0, 94, 172, 0.0);
+  --shimmer-2:       rgba(0, 94, 172, 0.15);
+  --shimmer-3:       rgba(0, 94, 172, 0.0);
 
-  --toggle-bg:       rgba(200, 220, 255, 0.8);
-  --toggle-knob:     #2070e0;
+  --toggle-bg:       rgba(230, 240, 250, 0.9);
+  --toggle-knob:     #005eac;
 }
 
 /* ══════════════════════════════════════════
@@ -104,22 +104,35 @@
 
 *, *::before, *::after { box-sizing: border-box; }
 
-/* Hide zero-height component iframes and their containers */
-iframe[height="0"],
-iframe[height="0"] + div,
-div:has(> iframe[height="0"]) {
-  display: none !important;
+/* Hide zero-height component iframes and their containers - AGGRESSIVE MODE */
+iframe[height="0"] {
+  position: absolute !important;
+  width: 0 !important;
   height: 0 !important;
   min-height: 0 !important;
+  max-height: 0 !important;
   margin: 0 !important;
   padding: 0 !important;
   border: none !important;
   overflow: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  visibility: hidden !important;
 }
 
-/* Hide streamlit component containers that have no visible content */
-[data-testid="stVerticalBlock"] > div:has(iframe[height="0"]) {
-  display: none !important;
+/* Hide streamlit component containers */
+[data-testid="stVerticalBlock"] > div:has(iframe[height="0"]),
+.stMarkdown:has(iframe[height="0"]) {
+  position: absolute !important;
+  width: 0 !important;
+  height: 0 !important;
+  min-height: 0 !important;
+  max-height: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+  opacity: 0 !important;
+  visibility: hidden !important;
 }
 
 /* Ensure header container is always visible */
@@ -127,13 +140,18 @@ div:has(> iframe[height="0"]) {
   display: block !important;
   margin: 0 !important;
   padding: 0 !important;
+  position: relative !important;
+  width: auto !important;
+  height: auto !important;
+  opacity: 1 !important;
+  visibility: visible !important;
 }
 
 html, body {
-  font-family: 'Outfit', sans-serif;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
   background: var(--bg-base) !important;
   color: var(--text-primary) !important;
-  transition: background 0.5s ease, color 0.5s ease;
+  transition: background 0.4s ease, color 0.4s ease;
 }
 
 /* Override every streamlit surface */
@@ -144,7 +162,7 @@ section[data-testid="stSidebar"],
 .main,
 .block-container {
   background: transparent !important;
-  font-family: 'Outfit', sans-serif !important;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif !important;
   color: var(--text-primary) !important;
 }
 
@@ -169,6 +187,7 @@ section[data-testid="stSidebar"],
     var(--bg-base);
   animation: meshPulse 12s ease-in-out infinite alternate;
   pointer-events: none;
+  transition: background 0.4s ease, opacity 0.4s ease;
 }
 
 @keyframes meshPulse {
@@ -190,6 +209,7 @@ section[data-testid="stSidebar"],
     linear-gradient(90deg, var(--grid-color-2) 1px, transparent 1px);
   background-size: 80px 80px, 80px 80px, 20px 20px, 20px 20px;
   pointer-events: none;
+  transition: opacity 0.4s ease;
 }
 
 [data-testid="stMain"] {
@@ -202,9 +222,10 @@ section[data-testid="stSidebar"],
 ══════════════════════════════════════════ */
 
 h1, h2, h3, h4 {
-  font-family: 'Syne', sans-serif !important;
+  font-family: 'Inter', sans-serif !important;
   color: var(--text-primary) !important;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.01em;
+  font-weight: 600 !important;
 }
 
 code, pre, .stCode, [data-testid="stCode"] {
@@ -282,24 +303,20 @@ code:hover, pre:hover {
 }
 
 .fai-title {
-  font-family: 'Syne', sans-serif;
-  font-size: 1.3rem;
-  font-weight: 800;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  background: linear-gradient(135deg, var(--text-primary) 0%, var(--accent) 60%, var(--accent-2) 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+  font-family: 'Inter', sans-serif;
+  font-size: 1.4rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--text-primary);
 }
 
 .fai-subtitle {
-  font-size: 0.72rem;
+  font-size: 0.8rem;
   color: var(--text-secondary);
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  margin-top: 2px;
-  font-family: 'JetBrains Mono', monospace;
+  letter-spacing: 0.01em;
+  margin-top: 4px;
+  font-family: 'Inter', sans-serif;
+  font-weight: 400;
 }
 
 /* ══════════════════════════════════════════
@@ -681,7 +698,7 @@ code:hover, pre:hover {
   border-radius: 24px;
   font-size: 0.8rem;
   font-weight: 500;
-  font-family: 'Outfit', sans-serif;
+  font-family: 'Inter', sans-serif;
   background: var(--glass-bg);
   border: 1px solid var(--glass-border);
   backdrop-filter: blur(8px);
@@ -741,7 +758,7 @@ code:hover, pre:hover {
   font-size: 3rem;
   color: var(--accent);
   opacity: 0.12;
-  font-family: 'Syne', sans-serif;
+  font-family: 'Inter', sans-serif;
   line-height: 1;
 }
 
@@ -806,15 +823,15 @@ code:hover, pre:hover {
 
 /* Buttons */
 .stButton > button {
-  font-family: 'Outfit', sans-serif !important;
+  font-family: 'Inter', sans-serif !important;
   font-weight: 500 !important;
-  font-size: 0.87rem !important;
-  border-radius: 10px !important;
-  padding: 9px 20px !important;
-  transition: all 0.28s cubic-bezier(0.22, 1, 0.36, 1) !important;
+  font-size: 0.875rem !important;
+  border-radius: 8px !important;
+  padding: 10px 22px !important;
+  transition: all 0.24s cubic-bezier(0.22, 1, 0.36, 1) !important;
   position: relative !important;
   overflow: hidden !important;
-  letter-spacing: 0.02em !important;
+  letter-spacing: -0.01em !important;
   border: 1px solid var(--glass-border) !important;
   background: var(--glass-bg) !important;
   color: var(--text-primary) !important;
@@ -853,16 +870,16 @@ code:hover, pre:hover {
 }
 
 .stButton > button[kind="primary"] {
-  background: linear-gradient(135deg, rgba(32, 80, 200, 0.8) 0%, rgba(0, 150, 220, 0.7) 100%) !important;
-  border-color: rgba(77, 159, 255, 0.5) !important;
+  background: linear-gradient(135deg, var(--accent) 0%, var(--accent-2) 100%) !important;
+  border-color: var(--accent) !important;
   color: #fff !important;
-  box-shadow: 0 4px 24px rgba(32, 100, 255, 0.3), var(--glass-shadow) !important;
-  text-shadow: 0 1px 4px rgba(0,0,0,0.3);
+  box-shadow: 0 4px 20px var(--accent-glow), var(--glass-shadow) !important;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.2);
 }
 
 .stButton > button[kind="primary"]:hover {
-  box-shadow: 0 8px 36px rgba(32, 100, 255, 0.5), 0 0 0 1px rgba(77,159,255,0.4) !important;
-  transform: translateY(-3px) scale(1.01) !important;
+  box-shadow: 0 6px 28px var(--accent-glow), 0 0 0 1px var(--accent) !important;
+  transform: translateY(-2px) scale(1.01) !important;
 }
 
 /* Tabs */
@@ -877,7 +894,7 @@ code:hover, pre:hover {
 }
 
 .stTabs [data-baseweb="tab"] {
-  font-family: 'Outfit', sans-serif !important;
+  font-family: 'Inter', sans-serif !important;
   font-size: 0.87rem !important;
   font-weight: 500 !important;
   color: var(--text-secondary) !important;
@@ -902,7 +919,7 @@ code:hover, pre:hover {
 /* Expanders */
 .streamlit-expanderHeader,
 [data-testid="stExpander"] summary {
-  font-family: 'Outfit', sans-serif !important;
+  font-family: 'Inter', sans-serif !important;
   font-size: 0.85rem !important;
   font-weight: 500 !important;
   color: var(--text-secondary) !important;
@@ -929,7 +946,7 @@ code:hover, pre:hover {
 .stTextInput input,
 .stTextArea textarea,
 .stNumberInput input {
-  font-family: 'Outfit', sans-serif !important;
+  font-family: 'Inter', sans-serif !important;
   font-size: 0.87rem !important;
   background: var(--glass-bg) !important;
   border: 1px solid var(--glass-border) !important;
@@ -952,7 +969,7 @@ code:hover, pre:hover {
 .stTextInput label,
 .stTextArea label,
 .stNumberInput label {
-  font-family: 'Outfit', sans-serif !important;
+  font-family: 'Inter', sans-serif !important;
   font-size: 0.82rem !important;
   color: var(--text-secondary) !important;
   font-weight: 500 !important;
@@ -983,7 +1000,7 @@ code:hover, pre:hover {
 
 /* Radio buttons */
 .stRadio label {
-  font-family: 'Outfit', sans-serif !important;
+  font-family: 'Inter', sans-serif !important;
   font-size: 0.87rem !important;
   color: var(--text-secondary) !important;
   transition: color 0.2s ease !important;
@@ -1022,7 +1039,7 @@ code:hover, pre:hover {
   border: 1px solid var(--glass-border) !important;
   border-radius: 12px !important;
   backdrop-filter: blur(8px) !important;
-  font-family: 'Outfit', sans-serif !important;
+  font-family: 'Inter', sans-serif !important;
 }
 
 /* Sidebar */
@@ -1034,7 +1051,7 @@ section[data-testid="stSidebar"] {
 
 /* Checkboxes */
 .stCheckbox label {
-  font-family: 'Outfit', sans-serif !important;
+  font-family: 'Inter', sans-serif !important;
   font-size: 0.87rem !important;
   color: var(--text-secondary) !important;
 }
@@ -1042,7 +1059,7 @@ section[data-testid="stSidebar"] {
 /* Captions */
 .stCaption,
 [data-testid="stCaptionContainer"] {
-  font-family: 'Outfit', sans-serif !important;
+  font-family: 'Inter', sans-serif !important;
   color: var(--text-secondary) !important;
   font-size: 0.79rem !important;
 }
@@ -1097,7 +1114,7 @@ hr {
   gap: 7px;
   font-size: 0.78rem;
   color: var(--text-secondary);
-  font-family: 'Outfit', sans-serif;
+  font-family: 'Inter', sans-serif;
 }
 
 .legend-dot {
@@ -1136,7 +1153,7 @@ hr {
 
 .section-header-text h3 {
   margin: 0;
-  font-family: 'Syne', sans-serif;
+  font-family: 'Inter', sans-serif;
   font-size: 1.1rem;
   font-weight: 700;
   color: var(--text-primary);
