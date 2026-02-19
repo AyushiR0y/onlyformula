@@ -811,7 +811,7 @@ def run_extraction_for_variant(variant_name: str, uploaded_files: list, target_o
 
 def main():
     st.set_page_config(
-        page_title="Document Formula Extractor",
+        page_title="Formula AI",
         page_icon="🧮",
         layout="wide",
         initial_sidebar_state="expanded"
