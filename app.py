@@ -420,8 +420,10 @@ def render_header():
         </div>
         <label class="theme-toggle" title="Toggle dark / light mode">
             <input type="checkbox" id="faiToggle" onchange="
-                const t = window.FAITheme ? window.FAITheme.toggle() : 'dark';
-                this.checked = (t === 'light');
+                if (window.FAITheme) {
+                    const t = window.FAITheme.toggle();
+                    this.checked = (t === 'light');
+                }
             ">
             <div class="toggle-track">
                 <span class="toggle-icon moon">🌙</span>
@@ -430,6 +432,56 @@ def render_header():
             </div>
         </label>
     </div>
+    <script>
+    (function() {
+        if (window.FAITheme) return; // Already initialized
+        
+        const KEY = 'fai_theme';
+        
+        function apply(t) {
+            document.documentElement.setAttribute('data-theme', t);
+            document.body.setAttribute('data-theme', t);
+            const app = document.querySelector('[data-testid="stAppViewContainer"]');
+            if (app) app.setAttribute('data-theme', t);
+            const main = document.querySelector('[data-testid="stMain"]');
+            if (main) main.setAttribute('data-theme', t);
+            
+            if (t === 'light') {
+                document.body.style.backgroundColor = '#f8fafc';
+            } else {
+                document.body.style.backgroundColor = '#05070f';
+            }
+        }
+        
+        const saved = localStorage.getItem(KEY) || 'dark';
+        apply(saved);
+        
+        window.FAITheme = {
+            get: () => localStorage.getItem(KEY) || 'dark',
+            toggle: function() {
+                const next = (localStorage.getItem(KEY)||'dark') === 'dark' ? 'light' : 'dark';
+                localStorage.setItem(KEY, next);
+                apply(next);
+                return next;
+            }
+        };
+        
+        // Sync checkbox state
+        setTimeout(function() {
+            const cb = document.getElementById('faiToggle');
+            if (cb && window.FAITheme) cb.checked = window.FAITheme.get() === 'light';
+        }, 100);
+        
+        // Re-apply on changes
+        const obs = new MutationObserver(() => {
+            const t = localStorage.getItem(KEY) || 'dark';
+            if (document.documentElement.getAttribute('data-theme') !== t) {
+                apply(t);
+            }
+        });
+        obs.observe(document.body, {childList: true, subtree: true});
+    })();
+    </script>
     """, unsafe_allow_html=True)
 
 
@@ -826,59 +878,6 @@ def main():
     <div class="fai-footer">
         <span>DEVELOPED BY BLIC GENAI TEAM &nbsp;·&nbsp; FORMULA AI v2.0</span>
     </div>""",unsafe_allow_html=True)
-    
-    # Inject theme script at the end to avoid layout interference
-    components.html("""
-    <script>
-    (function() {
-        const KEY = 'fai_theme';
-        function apply(t) {
-            // Apply theme to all relevant elements
-            document.documentElement.setAttribute('data-theme', t);
-            document.body.setAttribute('data-theme', t);
-            const app = document.querySelector('[data-testid="stAppViewContainer"]');
-            if (app) app.setAttribute('data-theme', t);
-            const main = document.querySelector('[data-testid="stMain"]');
-            if (main) main.setAttribute('data-theme', t);
-            
-            // Force background color update
-            if (t === 'light') {
-                document.body.style.backgroundColor = '#f8fafc';
-            } else {
-                document.body.style.backgroundColor = '#05070f';
-            }
-        }
-        
-        const saved = localStorage.getItem(KEY) || 'dark';
-        apply(saved);
-        
-        window.FAITheme = {
-            get: () => localStorage.getItem(KEY) || 'dark',
-            toggle: function() {
-                const next = (localStorage.getItem(KEY)||'dark') === 'dark' ? 'light' : 'dark';
-                localStorage.setItem(KEY, next); 
-                apply(next); 
-                return next;
-            }
-        };
-        
-        // Re-apply after Streamlit rerenders
-        const obs = new MutationObserver(() => {
-            const t = localStorage.getItem(KEY) || 'dark';
-            if (document.documentElement.getAttribute('data-theme') !== t) {
-                apply(t);
-            }
-        });
-        obs.observe(document.body, {childList: true, subtree: true});
-        
-        // Sync checkbox state
-        setTimeout(function() {
-            const cb = document.getElementById('faiToggle');
-            if (cb && window.FAITheme) cb.checked = window.FAITheme.get() === 'light';
-        }, 100);
-    })();
-    </script>
-    """, height=0, scrolling=False)
 
 
 if __name__ == "__main__":
