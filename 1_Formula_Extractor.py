@@ -542,17 +542,30 @@ Check if the formula has conditions:
 If conditional, extract ALL branches and their conditions
 
 STEP 4A: HANDLE TERMINAL BONUS & SPECIAL PAYOUTS
-Terminal bonus is often a one-time additional payout at maturity or surrender. Watch for:
-- Phrases: "terminal bonus", "final bonus", "loyalty bonus", "maturity bonus", "bonus at maturity"
-- Tables with "Terminal Bonus" rows or columns
-- Conditions like "if policy runs to maturity" or "on completion of policy term"
-- Formulas like "Terminal_Bonus = FUND_VALUE * BONUS_RATE" or "max of (fixed amount, percentage of sum assured)"
-- Multiple variants: "Terminal Bonus (if maturity) vs Terminal Bonus (if surrender)"
-- Conditions involving policy duration: "if completed more than X years" → bonus applies
-- **If formula mentions bonus but doesn't define it clearly**: Look for a separate "Terminal Bonus definition" section or table
-- **If bonus is percentage-based**: Extract the exact percentage/factor and conditions for application
-- **If bonus is conditional on events**: Extract all event-based conditions (e.g., death, maturity, early surrender)
-Include terminal bonus in the formula if it appears as an addition to the base calculation (e.g., "Final_Value = BASE_VALUE + TERMINAL_BONUS")
+Terminal bonus is typically a one-time additional payout calculated as a product of rate, duration, and benefit base. Watch for:
+- Phrases: "terminal bonus", "final bonus", "loyalty bonus", "maturity bonus", "bonus at maturity", "bonus on surrender"
+- **CRITICAL PATTERN**: Terminal Bonus = (RATE) × (DURATION) × (BENEFIT_BASE)
+  Where:
+  * RATE = Terminal Bonus rate (usually a percentage or decimal factor like 0.02, 2%, etc.)
+  * DURATION = Policy duration (could be "Policy year of surrender" OR "Policy term" OR elapsed years, etc.)
+  * BENEFIT_BASE = The benefit being used as the base (e.g., "Guaranteed Maturity Benefit", "Paid-up Guaranteed Maturity Benefit", "Sum Assured", etc.)
+  
+- **Look for statements like**:
+  * "Terminal Bonus on Surrender = (rate) × (policy year) × (Paid-up GMB)"
+  * "Terminal Bonus on Maturity = (rate) × (policy term) × (GMB)"
+  * "Bonus = Terminal bonus rate × Years × Guaranteed benefit"
+  * Variations where the order changes but three components multiply: A × B × C where A is rate, B is time, C is benefit
+
+- **Extract ALL variants**: Different formulas may apply for different scenarios (surrender vs. maturity, different time periods)
+- **Map to variables**: Identify which available variables correspond to rate, duration, and benefit components
+  * Terminal bonus rate might be: TERMINAL_BONUS_RATE, BONUS_RATE, or a fixed percentage value
+  * Duration could be: Policy_year_of_surrender, policy_term, no_of_premium_paid, elapsed_policy_duration, or similar
+  * Benefit base could be: GMB, PAID_UP_GMB, GUARANTEED_MATURITY_BENEFIT, SUM_ASSURED, or similar
+  
+- **Do NOT reduce to "declared value"**: Terminal Bonus is NOT a lookup value - it's a calculated multiplier. Extract the actual multiplier formula.
+- **If bonus appears in tables**: Look for separate rows/columns for "Terminal Bonus rate", "Terminal Bonus on Maturity", "Terminal Bonus on Surrender"
+- **Conditional bonus**: Mark IS_CONDITIONAL = YES if bonus formula changes based on surrender vs. maturity or other conditions
+- **Include bonus in final values**: If terminal bonus is part of the final payout, express as: Final_Value = Base_Value + (TERMINAL_BONUS_RATE × DURATION × BENEFIT_BASE)
 
 STEP 5: IDENTIFY VARIABLES USED
 List only variables that appear in:
@@ -595,11 +608,31 @@ CRITICAL GUARDRAILS:
 ✓ DO quote document evidence directly (including examples)
 ✓ DO list only variables that appear in the formula itself or are clearly represented in examples
 ✓ DO map concrete values in examples to their corresponding variable names using context clues
+✓ DO extract Terminal Bonus as a COMPONENT-BASED CALCULATION: (rate) × (duration) × (benefit), NOT as a single "declared value"
+✓ DO identify the three components of Terminal Bonus: rate factor, time/duration measure, and benefit base
+✓ DO extract ALL Terminal Bonus variants if found (on Maturity vs. on Surrender may have different formulas)
 ✗ DO NOT assume or invent formulas if not found in document or examples
 ✗ DO NOT infer "industry standard" calculations without document basis
 ✗ DO NOT skip or modify variable names
 ✗ DO NOT ignore worked examples - they are valid formula sources
 ✗ DO NOT add explanatory notes outside the specified format
+✗ DO NOT reduce Terminal Bonus to a single declared value - always extract the multiplier formula structure
+✗ DO NOT treat Terminal Bonus rate as the complete formula - it must be multiplied by duration and benefit base
+
+TERMINAL BONUS EXTRACTION EXAMPLE:
+If document states: "Terminal Bonus on Surrender = (Terminal Bonus rate) × (Policy year of surrender) × (Paid up Guaranteed Maturity Benefit)"
+Extract as: 
+  FORMULA_EXPRESSION: TERMINAL_BONUS_RATE * policy_year_of_surrender * PAID_UP_GMB
+  IS_CONDITIONAL: YES
+  CONDITIONS:
+  - CONDITION_1: On Surrender | EXPRESSION_1: TERMINAL_BONUS_RATE * policy_year_of_surrender * PAID_UP_GMB
+
+If document shows multiple scenarios, extract as:
+  FORMULA_EXPRESSION: (TERMINAL_BONUS_RATE * policy_year_of_surrender * PAID_UP_GMB) if surrender else (TERMINAL_BONUS_RATE * POLICY_TERM * GMB)
+  IS_CONDITIONAL: YES
+  CONDITIONS:
+  - CONDITION_1: On Surrender | EXPRESSION_1: TERMINAL_BONUS_RATE * policy_year_of_surrender * PAID_UP_GMB
+  - CONDITION_2: On Maturity | EXPRESSION_2: TERMINAL_BONUS_RATE * POLICY_TERM * GMB
 
 DOCUMENT CONTEXT:
 {context}
