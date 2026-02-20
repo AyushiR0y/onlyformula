@@ -944,13 +944,17 @@ def main():
         ('previous_selected_variables', DEFAULT_TARGET_OUTPUT_VARIABLES.copy()),
         ('variant_results', {}),      # {variant_name: List[Dict]}
         ('num_variants', 2),
-        ('variant_names', ['Product A']),
+        ('variant_names', ['Product A', 'Product B']),  # Initialize with at least 2 variants
         ('mode', 'single'),           # 'single' or 'multi'
         ('custom_input_variables', INPUT_VARIABLES.copy()),  # User-customizable input variables
         ('editing_input_var', None),  # Variable name being edited
     ]:
         if key not in st.session_state:
             st.session_state[key] = default
+
+    # Ensure variant_names always has enough elements for num_variants
+    while len(st.session_state.variant_names) < st.session_state.num_variants:
+        st.session_state.variant_names.append(f"Variant {len(st.session_state.variant_names) + 1}")
 
     st.markdown("---")
 
@@ -1167,6 +1171,10 @@ def main():
             st.session_state.variant_names = st.session_state.variant_names[:num_variants]
             st.rerun()
 
+        # Ensure variant_names list is properly initialized with enough elements
+        while len(st.session_state.variant_names) < num_variants:
+            st.session_state.variant_names.append(f"Variant {len(st.session_state.variant_names) + 1}")
+        
         variant_files = {}
         all_filled = True
 
@@ -1181,13 +1189,20 @@ def main():
                 if variant_idx >= num_variants:
                     break
                 with cols[col_idx]:
-                    default_name = st.session_state.variant_names[variant_idx]
+                    # Safe access with bounds checking
+                    if variant_idx < len(st.session_state.variant_names):
+                        default_name = st.session_state.variant_names[variant_idx]
+                    else:
+                        default_name = f"Variant {variant_idx + 1}"
                     variant_name = st.text_input(
                         f"Variant {variant_idx + 1} Name",
                         value=default_name,
                         key=f"variant_name_{variant_idx}",
                         placeholder="e.g. New Product, Old Product"
                     )
+                    # Ensure the list is long enough before assigning
+                    while len(st.session_state.variant_names) <= variant_idx:
+                        st.session_state.variant_names.append(f"Variant {len(st.session_state.variant_names) + 1}")
                     st.session_state.variant_names[variant_idx] = variant_name
 
                     uf_key = f"variant_files_{variant_idx}_{hash(str(sorted(st.session_state.selected_output_variables)))}"
