@@ -447,7 +447,9 @@ class StableChunkedDocumentFormulaExtractor:
             'benefit': ['benefit', 'payout', 'income', 'amount'],
             'death': ['death', 'mortality', 'sum assured'],
             'maturity': ['maturity', 'endowment', 'maturity date'],
-            'charge': ['charge', 'fee', 'deduction', 'cost']
+            'charge': ['charge', 'fee', 'deduction', 'cost'],
+            'terminal': ['terminal bonus', 'bonus rate', 'bonus on', 'bonus at', 'proportion of', 'multiplied by', 'policy year', 'guaranteed maturity benefit', 'gmb', 'paid up', 'policy term'],
+            'bonus': ['terminal bonus', 'final bonus', 'bonus rate', 'bonus on', 'bonus at', 'bonus formula', '=', 'multiply', 'multiply by', 'proportion', 'guaranteed maturity benefit', 'gmb', 'policy year', 'policy term', 'paid-up', 'proportion of'],
         }
         relevant_keywords = []
         for category, keywords in formula_specific_keywords.items():
@@ -463,6 +465,17 @@ class StableChunkedDocumentFormulaExtractor:
                     formula_score += 2.0
             if formula_name.lower() in text_lower:
                 formula_score += 5.0
+            
+            # Bonus-specific scoring: Look for definition indicators
+            if 'bonus' in formula_name.lower() or 'terminal' in formula_name.lower():
+                # Boost chunks that have formula definition patterns
+                if any(pattern in text_lower for pattern in ['=', 'calculated as', 'is given by', 'formula:', 'multiplied by', 'multiply by', 'proportion of']):
+                    formula_score += 3.0
+                # Boost chunks with the three-component pattern (rate × duration × benefit)
+                component_indicators = ['rate', 'policy year', 'policy term', 'guaranteed maturity', 'gmb', 'paid-up', 'surrender', 'maturity']
+                component_count = sum(1 for indicator in component_indicators if indicator in text_lower)
+                formula_score += (component_count * 1.5)  # Reward chunks with multiple relevant components
+            
             chunk_copy = chunk.copy()
             chunk_copy['formula_score'] = formula_score
             formula_scored_chunks.append(chunk_copy)
@@ -544,6 +557,13 @@ If conditional, extract ALL branches and their conditions
 STEP 4A: HANDLE TERMINAL BONUS & SPECIAL PAYOUTS
 Terminal bonus is typically a one-time additional payout calculated as a product of rate, duration, and benefit base. Watch for:
 - Phrases: "terminal bonus", "final bonus", "loyalty bonus", "maturity bonus", "bonus at maturity", "bonus on surrender"
+
+**CRITICAL: Distinguish between "DECLARATION" and "FORMULA DEFINITION":**
+- ✗ SKIP/IGNORE statements like: "Terminal Bonus for surrender is declared by the Company annually" (this is just a statement about timing/governance, not a formula)
+- ✓ LOOK FOR statements like: "Terminal Bonus = rate × duration × benefit" or "Terminal Bonus on Surrender = (Terminal Bonus rate) × (Policy year) × (Paid-up GMB)"
+- If you see only a declaration ("is declared annually"), keep searching the document for the actual formula definition section
+- The actual formula will show the mathematical relationship with rate, duration, and benefit components
+
 - **CRITICAL PATTERN**: Terminal Bonus = (RATE) × (DURATION) × (BENEFIT_BASE)
   Where:
   * RATE = Terminal Bonus rate (usually a percentage or decimal factor like 0.02, 2%, etc.)
@@ -555,6 +575,7 @@ Terminal bonus is typically a one-time additional payout calculated as a product
   * "Terminal Bonus on Maturity = (rate) × (policy term) × (GMB)"
   * "Bonus = Terminal bonus rate × Years × Guaranteed benefit"
   * Variations where the order changes but three components multiply: A × B × C where A is rate, B is time, C is benefit
+  * Table headers or sections titled "Formula for Terminal Bonus", "Terminal Bonus Calculation", "How Terminal Bonus is Computed"
 
 - **Extract ALL variants**: Different formulas may apply for different scenarios (surrender vs. maturity, different time periods)
 - **Map to variables**: Identify which available variables correspond to rate, duration, and benefit components
