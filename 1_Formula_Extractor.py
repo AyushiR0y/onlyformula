@@ -486,117 +486,82 @@ class StableChunkedDocumentFormulaExtractor:
         return combined_text
 
     def _extract_formula_with_context(self, formula_name: str, context: str) -> Optional[ExtractedFormula]:
-        prompt = f"""
-Extract the calculation formula for "{formula_name}" from the following document content.
+        prompt = f"""TASK: Extract calculation formulas for variables from a document.
 
-DOCUMENT CONTENT:
+YOUR ROLE: Carefully read the provided document and extract ONLY what is explicitly stated. Do not invent, assume, or use external knowledge to fill gaps. Your primary source of truth is the document content.
+
+TARGET VARIABLE: {formula_name}
+
+STEP 1: SCAN FOR EXPLICIT FORMULAS
+Search the document for any of these patterns:
+- Direct assignments: "{formula_name} = ...", "{formula_name}: ...", "{formula_name} is calculated as ..."
+- Table rows where the left cell contains "{formula_name}" or a close variant
+- Sections labeled "{formula_name}", "Calculation of {formula_name}", etc.
+- Numbered lists or bullet points defining "{formula_name}"
+- Mathematical expressions with variable names matching available variables
+
+STEP 2: EXTRACT EXACTLY AS PRESENTED
+If found, extract the formula EXACTLY as stated in the document:
+- Preserve variable names exactly (e.g., if document says "PAID_UP_SA_ON_DEATH", use that, not variations)
+- If multiple branches exist (different conditions), extract ALL of them
+- If it's a table with rows/columns, extract the cell values as-is with their conditions
+- If there are units, percentages, or multipliers, include them as written
+
+STEP 3: DETECT CONDITIONAL STRUCTURES
+Check if the formula has conditions:
+- "if/then/else" statements
+- Tiered structures ("for years 1-3", "for years 4+", etc.)
+- Multiple cases in a table (different rows = different conditions)
+- MAX/MIN selections between multiple options
+If conditional, extract ALL branches and their conditions
+
+STEP 4: IDENTIFY VARIABLES USED
+List only variables that appear in:
+- The extracted formula expression itself
+- Variable names: {', '.join(self.input_variables.keys())}
+Do not invent variables; only list what appears in the formula.
+
+STEP 5: LOCATE SUPPORTING EVIDENCE
+Quote the exact text from the document that defines this formula:
+- If from a table: include table caption/title, row labels, column headers, and cell content
+- If from text: provide the sentence or paragraph verbatim
+- Mark as "INFERRED" ONLY if: (1) formula structure is explicitly shown but variable names aren't fully spelled out, OR (2) you must interpret obvious abbreviations
+
+STEP 6: FORMAT RESPONSE
+Use the structure below. Respond with ONLY this format, no explanations.
+
+---
+
+DOCUMENT_EVIDENCE: [Exact verbatim text from document. For tables: "Table X.Y - [Title]. Row '[label]', Columns: [headers]. Cell values: [content]". For text: Direct quote. For INFERRED: note what was clarified.]
+
+IS_CONDITIONAL: [YES only if document explicitly shows conditions/branches; otherwise NO]
+
+CONDITIONS: [Only if IS_CONDITIONAL = YES. List each as:
+- CONDITION_[N]: [exact condition from document] | EXPRESSION_[N]: [the formula for that condition]]
+
+FORMULA_EXPRESSION: [The formula exactly as found. If conditional, use Python-style inline: "value_if_true if condition else value_if_false" or multi-line if complex]
+
+VARIABLES_USED: [Comma-separated list of variables that appear in the FORMULA_EXPRESSION]
+
+BUSINESS_CONTEXT: [One sentence explaining what this calculates, based on the document context]
+
+---
+
+CRITICAL GUARDRAILS:
+✓ DO extract formulas exactly as they appear in the document (including variable names, operators, numbers)
+✓ DO preserve conditional logic and all branches if present
+✓ DO quote document evidence directly
+✓ DO list only variables that appear in the formula itself
+✗ DO NOT assume or invent formulas if not found in document
+✗ DO NOT infer "industry standard" calculations
+✗ DO NOT skip or modify variable names
+✗ DO NOT add explanatory notes outside the specified format
+
+DOCUMENT CONTEXT:
 {context}
 
-AVAILABLE VARIABLES:
+AVAILABLE VARIABLES (reference only):
 {', '.join(self.input_variables.keys())}
-
-INSTRUCTIONS:
-1. Identify a mathematical formula or calculation method for "{formula_name}"
-2. Use the available variables and generated variables from the previous formulas where possible
-3. Extract the formula expression from natural language
-4. Look carefully at variable name suffixes like "_ON_DEATH" - use the correct variant
-5. IMPORTANT: You MUST provide a formula for "{formula_name}". Do not skip it.
-6. If the exact formula is not clearly defined in the document:
-   - Make a reasonable inference based on similar formulas
-   - Use industry-standard calculations as fallback
-   - Provide a placeholder formula with low confidence
-7. Pay close attention to formulas involving:
-   - Terms around GSV, SSV (Surrender Paid Amount is usually a max of multiple components)
-   - Exponential terms like (1/1.05)^N
-   - Conditions like policy term > 3 years
-   - Capital Units references
-   - ON_DEATH is an important qualifier
-8. Reuse PAID_UP_SA_ON_DEATH in future formulas instead of Present_Value_of_paid_up_sum_assured_on_death
-9. For PAID_UP_INCOME_INSTALLMENT: Income_Benefit_Amount * Income_Benefit_Frequency is always used, along with no_of_premium_paid and PREMIUM_TERM
-10. Total Premium paid uses FULL_TERM_PREMIUM, no_of_premium_paid and BOOKING_FREQUENCY
-
-TABLE EXTRACTION GUIDELINES (CRITICAL FOR STRUCTURED DATA):
-11. **Tables and Merged Cells**: If the document contains tables:
-    - Look for MERGED ROWS or MERGED CELLS that act as category headers or group titles
-    - A merged cell/row typically spans multiple columns and contains a formula name or category
-    - Formulas may be listed in rows BELOW the merged header, with conditions in different columns
-    - Example table structure:
-      | Formula Name (merged across columns) | Condition 1 | Condition 2 | Condition 3 |
-      | Specific Case A                       | expr_A1     | expr_A2     | expr_A3     |
-      | Specific Case B                       | expr_B1     | expr_B2     | expr_B3     |
-    
-12. **Column Headers as Conditions**: 
-    - Column headers often represent CONDITIONS (e.g., "Year < 3", "Year 3-5", "Year > 5")
-    - If the target formula appears as a merged row header, extract formulas from cells below it
-    - Map each column header to its corresponding condition
-    - Combine row labels (left column) with column conditions if both exist
-    
-13. **Row Labels and Grouping**:
-    - First column often contains row labels that qualify the formula further
-    - Combine row labels with the merged title to understand the complete context
-    - Example: Merged title "GSV", Row label "If premium paid < 3 years" → GSV calculation for that condition
-    
-14. **Multiple Formula Variants in Tables**:
-    - A single formula name may have multiple variants based on table structure
-    - Look for patterns like: "Formula X (Case 1)", "Formula X (Case 2)" in rows
-    - Or conditions specified in column headers applying to different expressions
-    - Extract ALL variants and combine them using appropriate conditional logic
-    
-15. **Table Context Awareness**:
-    - Read table captions, notes, and legends - they often contain critical multipliers or factors
-    - Footer notes may specify default values, exceptions, or global conditions
-    - Adjacent cells may contain explanatory text that clarifies the formula
-    
-16. **Handling Table Fragments**:
-    - Tables may be split across chunks - look for continuation patterns
-    - If you see partial table structure, infer the pattern from visible rows
-    - Headers like "continued..." or "...cont'd" indicate table continuation
-
-MULTI-LEVEL & CONDITIONAL FORMULA HANDLING (CRITICAL):
-- If the formula has IF/ELSE conditions (e.g., "if policy_year < 3 then X else Y"), extract ALL branches
-- If the formula uses a tiered/stepped structure (e.g., different rates for different durations), list each tier
-- If the formula is a piecewise function, capture every piece with its condition
-- Capture nested conditions (e.g., "if A then (if B then X else Y) else Z")
-- For MAX/MIN selections, include all candidates
-- Use Python-style conditional syntax: "X if condition else Y"
-- For multi-step formulas, show each intermediate step clearly labelled
-
-Examples:
-- "surrender value is higher of GSV or SSV" → "MAX(GSV, SSV)"
-- "if policy_year < 3: 0; elif policy_year < 5: GSV_FACTOR * TOTAL_PREMIUM_PAID * 0.5; else: GSV_FACTOR * TOTAL_PREMIUM_PAID"
-- "Sum Assured on Death is higher of SA, 10x AP or ROP" → "MAX(SUM_ASSURED, TEN_TIMES_AP, one_oh_five_percent_total_premium)"
-- Conditional: "PAID_UP_SA * SSV1_FACTOR if no_of_premium_paid >= 3 else 0"
-
-TABLE-BASED FORMULA EXAMPLES:
-- Table with merged header "GSV" and rows showing different policy years:
-  * Row 1: "Year < 3" | "0"
-  * Row 2: "Year 3-5" | "0.5 * TOTAL_PREMIUM_PAID * GSV_FACTOR"
-  * Row 3: "Year > 5" | "TOTAL_PREMIUM_PAID * GSV_FACTOR"
-  → Extract as: "0 if policy_year < 3 else (0.5 * TOTAL_PREMIUM_PAID * GSV_FACTOR if policy_year <= 5 else TOTAL_PREMIUM_PAID * GSV_FACTOR)"
-
-- Table with merged title "SURRENDER_VALUE" spanning columns with different product types:
-  * Column headers: "Product A" | "Product B" | "Product C"
-  * If searching for SURRENDER_VALUE and context matches Product A → extract from that column
-  
-- Table showing formulas with row groupings:
-  * Merged row: "Special Surrender Value (SSV)"
-  * Sub-row 1: "Component 1" | "PAID_UP_SA * SSV1_FACTOR"
-  * Sub-row 2: "Component 2" | "ROP * SSV2_FACTOR"
-  * Sub-row 3: "Component 3" | "PAID_UP_INCOME * SSV3_FACTOR"
-  * If searching for SSV → "SSV1 + SSV2 + SSV3" or "MAX(SSV1, SSV2, SSV3)" depending on table context
-
-RESPONSE FORMAT:
-FORMULA_EXPRESSION: [primary mathematical expression; if conditional, use Python-style if/else inline or multi-line]
-IS_CONDITIONAL: [YES or NO]
-CONDITIONS:
-- CONDITION_1: [condition text e.g. "policy_year >= 3"] | EXPRESSION_1: [formula when condition met]
-- CONDITION_2: [condition text e.g. "policy_year < 3"] | EXPRESSION_2: [formula when condition met]
-(Only fill CONDITIONS block if IS_CONDITIONAL is YES, otherwise leave blank)
-VARIABLES_USED: [comma-separated list]
-DOCUMENT_EVIDENCE: [exact or near-exact text passage from the document that supports this formula — quote it verbatim if possible. If from a table, include: table title/caption, merged row header, column headers, and relevant cell values. Write "INFERRED" only if not explicit in document. Example: "From Table 3.2 'Surrender Values': Row header 'GSV' with columns 'Year<3: 0', 'Year 3-5: 0.5*Premium*Factor', 'Year>5: Premium*Factor'"]
-BUSINESS_CONTEXT: [brief explanation of what this formula calculates]
-
-Respond with only the requested format.
 """
 
         models_to_try = ["gpt-3.5-turbo", "gpt-4o-mini", "gpt-4"]
