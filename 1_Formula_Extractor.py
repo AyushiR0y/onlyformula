@@ -541,6 +541,19 @@ Check if the formula has conditions:
 - **Multiple examples with different scenarios** (e.g., "Example 1 (year 2): ...", "Example 2 (year 5): ...")
 If conditional, extract ALL branches and their conditions
 
+STEP 4A: HANDLE TERMINAL BONUS & SPECIAL PAYOUTS
+Terminal bonus is often a one-time additional payout at maturity or surrender. Watch for:
+- Phrases: "terminal bonus", "final bonus", "loyalty bonus", "maturity bonus", "bonus at maturity"
+- Tables with "Terminal Bonus" rows or columns
+- Conditions like "if policy runs to maturity" or "on completion of policy term"
+- Formulas like "Terminal_Bonus = FUND_VALUE * BONUS_RATE" or "max of (fixed amount, percentage of sum assured)"
+- Multiple variants: "Terminal Bonus (if maturity) vs Terminal Bonus (if surrender)"
+- Conditions involving policy duration: "if completed more than X years" → bonus applies
+- **If formula mentions bonus but doesn't define it clearly**: Look for a separate "Terminal Bonus definition" section or table
+- **If bonus is percentage-based**: Extract the exact percentage/factor and conditions for application
+- **If bonus is conditional on events**: Extract all event-based conditions (e.g., death, maturity, early surrender)
+Include terminal bonus in the formula if it appears as an addition to the base calculation (e.g., "Final_Value = BASE_VALUE + TERMINAL_BONUS")
+
 STEP 5: IDENTIFY VARIABLES USED
 List only variables that appear in:
 - The extracted formula expression itself
