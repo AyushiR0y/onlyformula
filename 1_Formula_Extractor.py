@@ -95,6 +95,12 @@ INPUT_VARIABLES = {
     'N':'min(Policy_term, 20) - Elapsed_policy_duration',
     'SYSTEM_PAID': 'The amount paid by the system for surrender or maturity',
     'FUND_FACTOR': 'A factor used in the computation of Surrender Charge based on fund value, Capital fund value and Surrender charge value',
+    'GUARANTEED_PAYOUT': 'The guaranteed amount payable on surrender or maturity, calculated based on total premiums paid and GSV factor',
+    'SIMPLE_REVISIONARY_BONUS': 'A bonus amount added to the surrender value, calculated based on the number of years premiums have been paid and a fixed bonus rate',
+    'PAID_UP_GUARANTEED_MATURITY_BENEFIT_RATE': 'The rate used to calculate the paid-up guaranteed maturity benefit',
+    'HIGH_PREMIUM_MARKUP_RATE': 'A rate used to increase the surrender charge for policies with high premiums',
+    'FREQUENCY_FACTOR': 'A factor that adjusts calculations based on the frequency of premium payments (e.g., monthly, quarterly, yearly)',
+       
 }
 
 BASIC_DERIVED_FORMULAS = {
@@ -499,6 +505,7 @@ Search the document for any of these patterns:
 - Sections labeled "{formula_name}", "Calculation of {formula_name}", etc.
 - Numbered lists or bullet points defining "{formula_name}"
 - Mathematical expressions with variable names matching available variables
+- **Working examples or sample calculations** showing "{formula_name}" with concrete values (these demonstrate the formula structure)
 
 STEP 2: EXTRACT EXACTLY AS PRESENTED
 If found, extract the formula EXACTLY as stated in the document:
@@ -506,40 +513,61 @@ If found, extract the formula EXACTLY as stated in the document:
 - If multiple branches exist (different conditions), extract ALL of them
 - If it's a table with rows/columns, extract the cell values as-is with their conditions
 - If there are units, percentages, or multipliers, include them as written
+- **If only examples are found** (e.g., "Example: GSV = 100,000 * 0.9 * 5 = 450,000"), reverse-engineer the formula pattern by identifying:
+  * Which numbers are constants/factors vs. variable values
+  * The mathematical operations used (multiplication, addition, MAX, etc.)
+  * The general structure (e.g., "GSV = TOTAL_PREMIUM * GSV_FACTOR * years")
+  * Include the example in DOCUMENT_EVIDENCE and note it's from a worked example
 
-STEP 3: DETECT CONDITIONAL STRUCTURES
+STEP 3: ANALYZE WORKED EXAMPLES (if formula definition not found)
+If no direct formula is stated but examples exist:
+- Look for phrases like "Example:", "For instance:", "Sample calculation:", "Illustration:", "Consider:"
+- Examine the calculation steps shown with actual numbers
+- **Identify the pattern**: Replace concrete numbers with their corresponding variable names
+- Check if multiple examples exist (they may show different conditional branches)
+- Preserve the exact mathematical structure (operators, parentheses, order of operations)
+- Note in DOCUMENT_EVIDENCE that formula was derived from example(s)
+
+Example of reverse-engineering:
+Document says: "Example: GSV for year 5 = ₹1,00,000 (total premium) × 0.85 (factor) = ₹85,000"
+Extract as: "TOTAL_PREMIUM * GSV_FACTOR"
+
+STEP 4: DETECT CONDITIONAL STRUCTURES
 Check if the formula has conditions:
 - "if/then/else" statements
 - Tiered structures ("for years 1-3", "for years 4+", etc.)
 - Multiple cases in a table (different rows = different conditions)
 - MAX/MIN selections between multiple options
+- **Multiple examples with different scenarios** (e.g., "Example 1 (year 2): ...", "Example 2 (year 5): ...")
 If conditional, extract ALL branches and their conditions
 
-STEP 4: IDENTIFY VARIABLES USED
+STEP 5: IDENTIFY VARIABLES USED
 List only variables that appear in:
 - The extracted formula expression itself
+- Worked examples (map concrete values to variable names from context)
 - Variable names: {', '.join(self.input_variables.keys())}
-Do not invent variables; only list what appears in the formula.
+Do not invent variables; only list what appears in the formula or can be clearly mapped from examples.
 
-STEP 5: LOCATE SUPPORTING EVIDENCE
+STEP 6: LOCATE SUPPORTING EVIDENCE
 Quote the exact text from the document that defines this formula:
 - If from a table: include table caption/title, row labels, column headers, and cell content
 - If from text: provide the sentence or paragraph verbatim
-- Mark as "INFERRED" ONLY if: (1) formula structure is explicitly shown but variable names aren't fully spelled out, OR (2) you must interpret obvious abbreviations
+- **If from examples**: include the complete example text showing the calculation with values
+- Mark as "INFERRED" ONLY if: (1) formula structure is explicitly shown but variable names aren't fully spelled out, OR (2) you derived the formula from worked examples with concrete numbers
 
-STEP 6: FORMAT RESPONSE
+STEP 7: FORMAT RESPONSE
 Use the structure below. Respond with ONLY this format, no explanations.
 
 ---
 
-DOCUMENT_EVIDENCE: [Exact verbatim text from document. For tables: "Table X.Y - [Title]. Row '[label]', Columns: [headers]. Cell values: [content]". For text: Direct quote. For INFERRED: note what was clarified.]
+DOCUMENT_EVIDENCE: [Exact verbatim text from document. For tables: "Table X.Y - [Title]. Row '[label]', Columns: [headers]. Cell values: [content]". For text: Direct quote. For examples: Full example text. If INFERRED from examples: "Derived from example: [quote example]"]
 
-IS_CONDITIONAL: [YES only if document explicitly shows conditions/branches; otherwise NO]
+IS_CONDITIONAL: [YES only if document explicitly shows conditions/branches or multiple examples show different scenarios; otherwise NO]
 
 CONDITIONS: [Only if IS_CONDITIONAL = YES. List each as:
-- CONDITION_[N]: [exact condition from document] | EXPRESSION_[N]: [the formula for that condition]]
+- CONDITION_[N]: [exact condition from document or from example context] | EXPRESSION_[N]: [the formula for that condition]]
 
-FORMULA_EXPRESSION: [The formula exactly as found. If conditional, use Python-style inline: "value_if_true if condition else value_if_false" or multi-line if complex]
+FORMULA_EXPRESSION: [The formula exactly as found. If reverse-engineered from examples, show the pattern with variable names. If conditional, use Python-style inline: "value_if_true if condition else value_if_false" or multi-line if complex]
 
 VARIABLES_USED: [Comma-separated list of variables that appear in the FORMULA_EXPRESSION]
 
@@ -549,12 +577,15 @@ BUSINESS_CONTEXT: [One sentence explaining what this calculates, based on the do
 
 CRITICAL GUARDRAILS:
 ✓ DO extract formulas exactly as they appear in the document (including variable names, operators, numbers)
+✓ DO analyze worked examples and reverse-engineer formula patterns from them
 ✓ DO preserve conditional logic and all branches if present
-✓ DO quote document evidence directly
-✓ DO list only variables that appear in the formula itself
-✗ DO NOT assume or invent formulas if not found in document
-✗ DO NOT infer "industry standard" calculations
+✓ DO quote document evidence directly (including examples)
+✓ DO list only variables that appear in the formula itself or are clearly represented in examples
+✓ DO map concrete values in examples to their corresponding variable names using context clues
+✗ DO NOT assume or invent formulas if not found in document or examples
+✗ DO NOT infer "industry standard" calculations without document basis
 ✗ DO NOT skip or modify variable names
+✗ DO NOT ignore worked examples - they are valid formula sources
 ✗ DO NOT add explanatory notes outside the specified format
 
 DOCUMENT CONTEXT:
