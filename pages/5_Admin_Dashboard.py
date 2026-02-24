@@ -62,7 +62,7 @@ def _render_dashboard() -> None:
     # Calculate overall cost
     total_input_tokens = overall.get("input_tokens_total", 0)
     total_output_tokens = overall.get("output_tokens_total", 0)
-    total_cost_inr = (total_input_tokens * INPUT_COST_PER_1K_INR) + (total_output_tokens * OUTPUT_COST_PER_1K_INR)
+    total_cost_inr = ((total_input_tokens / 1000) * INPUT_COST_PER_1K_INR) + ((total_output_tokens / 1000) * OUTPUT_COST_PER_1K_INR)
 
     col1, col2, col3, col4, col5, col6 = st.columns(6)
     with col1:
@@ -92,7 +92,7 @@ def _render_dashboard() -> None:
             input_tokens = session.get("input_tokens_total", 0)
             output_tokens = session.get("output_tokens_total", 0)
             total_tokens = input_tokens + output_tokens
-            cost_inr = (input_tokens * INPUT_COST_PER_1K_INR) + (output_tokens * OUTPUT_COST_PER_1K_INR)
+            cost_inr = ((input_tokens / 1000) * INPUT_COST_PER_1K_INR) + ((output_tokens / 1000) * OUTPUT_COST_PER_1K_INR)
             
             session_rows.append(
                 {
@@ -135,7 +135,7 @@ def _render_dashboard() -> None:
                         in_tokens = call.get("input_tokens", 0)
                         out_tokens = call.get("output_tokens", 0)
                         purpose = call.get("purpose", "general")
-                        call_cost = (in_tokens * INPUT_COST_PER_1K_INR) + (out_tokens * OUTPUT_COST_PER_1K_INR)
+                        call_cost = ((in_tokens / 1000) * INPUT_COST_PER_1K_INR) + ((out_tokens / 1000) * OUTPUT_COST_PER_1K_INR)
                         
                         call_rows.append({
                             "Call #": i,
