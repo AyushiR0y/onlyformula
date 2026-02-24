@@ -10,6 +10,7 @@ import math
 from datetime import datetime, date
 import json
 from dateutil.relativedelta import relativedelta
+from usage_tracker import track_page_visit
 
 # Load Common CSS
 def load_css(file_name="style.css"):
@@ -1177,6 +1178,7 @@ def show_detailed_calculations(result_df: pd.DataFrame, formulas: List[Dict],
 # --- Main App ---
 def main():
     st.set_page_config(page_title="Calculation Engine", page_icon="🧮", layout="wide")
+    track_page_visit("Calculation Engine")
     load_css()
     
     st.markdown("""

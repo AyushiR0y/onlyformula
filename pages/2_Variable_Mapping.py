@@ -16,6 +16,7 @@ from pathlib import Path
 import time
 import io
 from functools import lru_cache
+from usage_tracker import track_page_visit, track_api_call
 
 @lru_cache(maxsize=1)
 def get_all_master_variables_cached():
@@ -385,6 +386,8 @@ class VariableHeaderMatcher:
     }}
 
     Output ONLY valid JSON, no other text."""
+
+            track_api_call("Variable Mapping")
 
             response = client.chat.completions.create(
                 model=DEPLOYMENT_NAME,
@@ -796,6 +799,8 @@ def load_css(file_name="style.css"):
         st.error(f"⚠️ CSS file not found at: `{css_path}`. <br>Please ensure `style.css` is in the main project folder.", unsafe_allow_html=True)
 def main():
     load_css()
+
+    track_page_visit("Variable Mapping")
 
     st.set_page_config(
         page_title="Variable Mapping",

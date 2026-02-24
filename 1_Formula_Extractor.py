@@ -18,6 +18,7 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_core.documents import Document
 import numpy as np
 from collections import defaultdict
+from usage_tracker import track_page_visit, track_api_call
 
 
 load_dotenv()
@@ -379,6 +380,7 @@ class StableChunkedDocumentFormulaExtractor:
 
     def _check_api_status(self) -> bool:
         try:
+            track_api_call("Formula Extractor")
             client.chat.completions.create(
                 model=DEPLOYMENT_NAME,
                 messages=[{"role": "user", "content": "Test"}],
@@ -666,6 +668,7 @@ AVAILABLE VARIABLES (reference only):
 
         for model in models_to_try:
             try:
+                track_api_call("Formula Extractor")
                 response = client.chat.completions.create(
                     model=DEPLOYMENT_NAME,
                     messages=[{"role": "user", "content": prompt}],
@@ -982,6 +985,7 @@ def main():
     )
 
     load_css()
+    track_page_visit("Formula Extractor")
 
     st.markdown(
         """
@@ -1152,8 +1156,6 @@ def main():
     # ========== UPLOAD MODE SELECTOR ==========
     st.subheader("📂 Upload Product Documents")
     
-    # Info about table handling
-    st.info("📊 **Enhanced Table Support**: This extractor now intelligently handles tables with merged cells, row/column headers, and grouped formulas. For best results, ensure tables in your documents have clear headers and structure.", icon="ℹ️")
     
     mode_col1, mode_col2 = st.columns([2, 3])
     with mode_col1:
