@@ -1453,9 +1453,21 @@ def main():
             st.warning("No variant results available.")
         else:
             # Compact header
-            st.markdown(f"""<div style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); padding: 12px 20px; border-radius: 8px; margin: 16px 0;">
-                <h3 style="color: white; margin: 0; font-size: 1.3rem;">📊 Multi-Variant Comparison ({len(variant_names)} variants)</h3>
-            </div>""", unsafe_allow_html=True)
+            st.markdown(
+                f"""
+                <div style="
+                    background: linear-gradient(135deg, #dbeafe 0%, #00eac 100%);
+                    padding: 12px 20px;
+                    border-radius: 8px;
+                    margin: 16px 0;
+                ">
+                    <h3 style="color: #0f172a; margin: 0; font-size: 1.3rem;">
+                        📊 Multi-Variant Comparison ({len(variant_names)} variants)
+                    </h3>
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
 
             # --- COMPARISON TABLE ---
             with st.expander("🔍 Side-by-Side Comparison", expanded=True):
