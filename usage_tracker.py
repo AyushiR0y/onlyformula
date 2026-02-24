@@ -71,7 +71,7 @@ def _get_or_create_session(page_name: str) -> Dict[str, Any]:
     
     # Find existing session
     for session in metrics["sessions"]:
-        if session["session_id"] == session_id and session["page"] == page_name:
+        if session["uuid"] == session_id and session["page"] == page_name:
             return session
     
     # Create new session with readable name

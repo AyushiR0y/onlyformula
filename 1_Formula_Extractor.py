@@ -18,6 +18,7 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_core.documents import Document
 import numpy as np
 from collections import defaultdict
+from difflib import SequenceMatcher
 from usage_tracker import track_page_visit, track_api_call, track_document_upload
 
 
@@ -139,6 +140,7 @@ class ExtractedFormula:
     source_method: str
     document_evidence: str
     specific_variables: Dict[str, str]
+    excel_formula: str = ""
     is_conditional: bool = False
     conditions: List[Dict] = None  # List of {condition: str, expression: str}
 
@@ -180,6 +182,7 @@ def extract_formulas_cached(
             {
                 'formula_name': f.formula_name,
                 'formula_expression': f.formula_expression,
+                'excel_formula': f.excel_formula,
                 'variants_info': f.variants_info,
                 'business_context': f.business_context,
                 'source_method': f.source_method,
@@ -213,6 +216,7 @@ def normalize_extracted_formulas(formulas: List[ExtractedFormula]) -> List[Extra
             formula = ExtractedFormula(
                 formula_name=formula.formula_name,
                 formula_expression=expression,
+                excel_formula=formula.excel_formula,
                 variants_info=formula.variants_info,
                 business_context=formula.business_context,
                 source_method=formula.source_method,
@@ -306,6 +310,7 @@ class StableChunkedDocumentFormulaExtractor:
                             return ExtractedFormula(
                                 formula_name=formula_name.upper(),
                                 formula_expression=formula_expr.strip(),
+                                excel_formula=self._to_excel_formula(formula_expr.strip()),
                                 variants_info="Extracted using offline pattern matching",
                                 business_context=f"Offline extraction for {formula_name}",
                                 source_method='offline_pattern_matching',
@@ -505,10 +510,101 @@ class StableChunkedDocumentFormulaExtractor:
             current_length += len(chunk_text)
         return combined_text
 
+    def _clean_formula_expression(self, expression: str) -> str:
+        expr = (expression or "").strip()
+        expr = expr.replace("×", "*").replace("÷", "/")
+
+        if '=' in expr and not any(op in expr for op in ['==', '!=', '<=', '>=']):
+            left, right = expr.split('=', 1)
+            if left.strip().replace(" ", "").upper() == left.strip().upper() or len(right.strip()) > 0:
+                expr = right.strip()
+
+        expr = re.sub(r'\s+', ' ', expr).strip()
+
+        of_pattern = re.compile(r'\b([A-Za-z_][A-Za-z0-9_]*|\d+(?:\.\d+)?)\s+of\s+([A-Za-z_][A-Za-z0-9_]*|\d+(?:\.\d+)?)\b', re.IGNORECASE)
+        for _ in range(5):
+            updated = of_pattern.sub(r'\1 * \2', expr)
+            if updated == expr:
+                break
+            expr = updated
+        return expr
+
+    def _prefer_known_variables(self, expression: str) -> Tuple[str, List[Dict[str, str]]]:
+        known_variables = set(self.input_variables.keys()) | set(self.basic_derived.keys()) | set(self.target_outputs)
+        reserved = {
+            'IF', 'AND', 'OR', 'NOT', 'MAX', 'MIN', 'ABS', 'ROUND', 'POWER', 'SQRT', 'SUM', 'INT',
+            'TRUE', 'FALSE', 'MONTHS_BETWEEN', 'ADD_MONTHS', 'CURRENT_DATE', 'ELSE', 'THEN'
+        }
+
+        changes: List[Dict[str, str]] = []
+        expr = expression
+        candidates = sorted(set(re.findall(r'\b[A-Za-z_][A-Za-z0-9_]*\b', expr)), key=len, reverse=True)
+
+        def normalize(token: str) -> str:
+            return re.sub(r'[^a-z0-9]', '', token.lower())
+
+        for token in candidates:
+            token_upper = token.upper()
+            if token in known_variables or token_upper in known_variables or token_upper in reserved:
+                continue
+
+            normalized_token = normalize(token)
+            if not normalized_token:
+                continue
+
+            best_match = None
+            best_score = 0.0
+            for known in known_variables:
+                score = SequenceMatcher(None, normalized_token, normalize(known)).ratio()
+                if score > best_score:
+                    best_score = score
+                    best_match = known
+
+            if best_match and best_score >= 0.86:
+                expr = re.sub(rf'\b{re.escape(token)}\b', best_match, expr)
+                changes.append({"from": token, "to": best_match, "method": "lexical-semantic"})
+
+        return expr, changes
+
+    def _to_excel_formula(self, expression: str) -> str:
+        expr = (expression or "").strip()
+        if not expr:
+            return ""
+
+        if expr.startswith('='):
+            return expr
+
+        expr = expr.replace('**', '^')
+        expr = re.sub(r'\bmax\s*\(', 'MAX(', expr, flags=re.IGNORECASE)
+        expr = re.sub(r'\bmin\s*\(', 'MIN(', expr, flags=re.IGNORECASE)
+        expr = re.sub(r'\babs\s*\(', 'ABS(', expr, flags=re.IGNORECASE)
+        expr = re.sub(r'\bround\s*\(', 'ROUND(', expr, flags=re.IGNORECASE)
+
+        ternary_match = re.match(r'^(?P<true_expr>.+?)\s+if\s+(?P<cond>.+?)\s+else\s+(?P<false_expr>.+)$', expr, re.IGNORECASE)
+        if ternary_match:
+            true_expr = ternary_match.group('true_expr').strip()
+            cond = ternary_match.group('cond').strip()
+            false_expr = ternary_match.group('false_expr').strip()
+            expr = f"IF({cond}, {true_expr}, {false_expr})"
+
+        return f"={expr}"
+
+    def _collect_variables_from_expression(self, expression: str) -> Dict[str, str]:
+        specific_variables = {}
+        expression_tokens = set(re.findall(r'\b[A-Za-z_][A-Za-z0-9_]*\b', expression or ""))
+        for token in expression_tokens:
+            if token in self.input_variables:
+                specific_variables[token] = self.input_variables[token]
+            elif token in self.basic_derived:
+                specific_variables[token] = self.basic_derived[token]
+        return specific_variables
+
     def _extract_formula_with_context(self, formula_name: str, context: str) -> Optional[ExtractedFormula]:
         prompt = f"""TASK: Extract calculation formulas for variables from a document.
 
-YOUR ROLE: Carefully read the provided document and extract ONLY what is explicitly stated. Do not invent, assume, or use external knowledge to fill gaps. Your primary source of truth is the document content.
+    YOUR ROLE: You are an "Insurance Excel Formula Architect".
+    You produce machine-usable formulas that are convertible to Excel and preserve all document conditions.
+    You must maximize reuse of known variables and avoid free-text terms in formula expressions.
 
 TARGET VARIABLE: {formula_name}
 
@@ -589,12 +685,19 @@ Terminal bonus is typically a one-time additional payout calculated as a product
 - **Conditional bonus**: Mark IS_CONDITIONAL = YES if bonus formula changes based on surrender vs. maturity or other conditions
 - **Include bonus in final values**: If terminal bonus is part of the final payout, express as: Final_Value = Base_Value + (TERMINAL_BONUS_RATE × DURATION × BENEFIT_BASE)
 
-STEP 5: IDENTIFY VARIABLES USED
+STEP 5: IDENTIFY VARIABLES USED (STRICT VARIABLE POLICY)
 List only variables that appear in:
 - The extracted formula expression itself
 - Worked examples (map concrete values to variable names from context)
 - Variable names: {', '.join(self.input_variables.keys())}
-Do not invent variables; only list what appears in the formula or can be clearly mapped from examples.
+Do not invent variables unless no semantic match exists.
+
+Variable policy (mandatory):
+- First prefer exact names from Available Variables or known derived/target variables.
+- If document uses a close synonym/variant name, map it to the closest existing variable and keep that mapped variable in formulas.
+- Create a NEW variable only when no reasonable semantic match exists.
+- Formula expressions must not contain narrative terms like "if", "and", "of", "then" as plain text operators.
+- Use mathematical/comparison symbols and function syntax only.
 
 STEP 6: LOCATE SUPPORTING EVIDENCE
 Quote the exact text from the document that defines this formula:
@@ -617,6 +720,8 @@ CONDITIONS: [Only if IS_CONDITIONAL = YES. List each as:
 
 FORMULA_EXPRESSION: [The formula exactly as found. If reverse-engineered from examples, show the pattern with variable names. If conditional, use Python-style inline: "value_if_true if condition else value_if_false" or multi-line if complex]
 
+EXCEL_FORMULA: [Excel-ready equivalent beginning with '=' and using IF/AND/OR/MAX/MIN where needed. Must preserve same conditions/branches]
+
 VARIABLES_USED: [Comma-separated list of variables that appear in the FORMULA_EXPRESSION]
 
 BUSINESS_CONTEXT: [One sentence explaining what this calculates, based on the document context]
@@ -633,6 +738,7 @@ CRITICAL GUARDRAILS:
 ✓ DO extract Terminal Bonus as a COMPONENT-BASED CALCULATION: (rate) × (duration) × (benefit), NOT as a single "declared value"
 ✓ DO identify the three components of Terminal Bonus: rate factor, time/duration measure, and benefit base
 ✓ DO extract ALL Terminal Bonus variants if found (on Maturity vs. on Surrender may have different formulas)
+✓ DO return formulas in operator/function form that can be directly transformed to Excel
 ✗ DO NOT assume or invent formulas if not found in document or examples
 ✗ DO NOT infer "industry standard" calculations without document basis
 ✗ DO NOT skip or modify variable names
@@ -640,6 +746,7 @@ CRITICAL GUARDRAILS:
 ✗ DO NOT add explanatory notes outside the specified format
 ✗ DO NOT reduce Terminal Bonus to a single declared value - always extract the multiplier formula structure
 ✗ DO NOT treat Terminal Bonus rate as the complete formula - it must be multiplied by duration and benefit base
+✗ DO NOT return natural-language pseudo-formulas (e.g., "A and B", "X of Y", "if A then B")
 
 TERMINAL BONUS EXTRACTION EXAMPLE:
 If document states: "Terminal Bonus on Surrender = (Terminal Bonus rate) × (Policy year of surrender) × (Paid up Guaranteed Maturity Benefit)"
@@ -661,6 +768,12 @@ DOCUMENT CONTEXT:
 
 AVAILABLE VARIABLES (reference only):
 {', '.join(self.input_variables.keys())}
+
+KNOWN DERIVED VARIABLES:
+{', '.join(self.basic_derived.keys())}
+
+TARGET OUTPUT VARIABLES:
+{', '.join(self.target_outputs)}
 """
 
         models_to_try = ["gpt-3.5-turbo", "gpt-4o-mini", "gpt-4"]
@@ -702,6 +815,7 @@ AVAILABLE VARIABLES (reference only):
         return ExtractedFormula(
             formula_name=formula_name.upper(),
             formula_expression=f"{formula_name}  # {reason}",
+            excel_formula="",
             variants_info="Placeholder - could not extract",
             business_context=f"Placeholder for {formula_name}",
             source_method='placeholder',
@@ -713,35 +827,48 @@ AVAILABLE VARIABLES (reference only):
 
     def _parse_stable_formula_response(self, response_text: str, formula_name: str) -> Optional[ExtractedFormula]:
         try:
-            formula_match = re.search(r'FORMULA_EXPRESSION:\s*(.+?)(?=\nIS_CONDITIONAL|\nVARIABLES_USED|$)', response_text, re.DOTALL | re.IGNORECASE)
+            formula_match = re.search(r'FORMULA_EXPRESSION:\s*(.+?)(?=\nEXCEL_FORMULA|\nIS_CONDITIONAL|\nVARIABLES_USED|$)', response_text, re.DOTALL | re.IGNORECASE)
             formula_expression = formula_match.group(1).strip() if formula_match else "Formula not clearly defined"
+            formula_expression = self._clean_formula_expression(formula_expression)
+            formula_expression, mapping_changes = self._prefer_known_variables(formula_expression)
+
+            excel_formula_match = re.search(r'EXCEL_FORMULA:\s*(.+?)(?=\nVARIABLES_USED|\nDOCUMENT_EVIDENCE|$)', response_text, re.DOTALL | re.IGNORECASE)
+            excel_formula = excel_formula_match.group(1).strip() if excel_formula_match else ""
+            excel_formula = self._to_excel_formula(self._clean_formula_expression(excel_formula or formula_expression))
 
             is_conditional_match = re.search(r'IS_CONDITIONAL:\s*(YES|NO)', response_text, re.IGNORECASE)
             is_conditional = is_conditional_match and is_conditional_match.group(1).upper() == "YES"
 
             conditions = None
             if is_conditional:
-                conditions_block = re.search(r'CONDITIONS:\s*(.+?)(?=\nVARIABLES_USED|$)', response_text, re.DOTALL | re.IGNORECASE)
+                conditions_block = re.search(r'CONDITIONS:\s*(.+?)(?=\nEXCEL_FORMULA|\nVARIABLES_USED|$)', response_text, re.DOTALL | re.IGNORECASE)
                 if conditions_block:
                     conditions_text = conditions_block.group(1)
                     conditions = []
                     cond_lines = re.findall(r'-\s*CONDITION_\d+:\s*(.+?)\s*\|\s*EXPRESSION_\d+:\s*(.+)', conditions_text)
                     for cond, expr in cond_lines:
-                        conditions.append({"condition": cond.strip(), "expression": expr.strip()})
+                        cleaned_expr, _ = self._prefer_known_variables(self._clean_formula_expression(expr.strip()))
+                        conditions.append({"condition": cond.strip(), "expression": cleaned_expr})
 
             variables_match = re.search(r'VARIABLES_USED:\s*(.+?)(?=\nDOCUMENT_EVIDENCE|$)', response_text, re.DOTALL | re.IGNORECASE)
             variables_str = variables_match.group(1).strip() if variables_match else ""
             specific_variables = self._parse_variables_stable(variables_str)
+            specific_variables.update(self._collect_variables_from_expression(formula_expression))
 
             evidence_match = re.search(r'DOCUMENT_EVIDENCE:\s*(.+?)(?=\nBUSINESS_CONTEXT|$)', response_text, re.DOTALL | re.IGNORECASE)
             document_evidence = evidence_match.group(1).strip() if evidence_match else "No supporting evidence found"
 
             context_match = re.search(r'BUSINESS_CONTEXT:\s*(.+?)$', response_text, re.DOTALL | re.IGNORECASE)
             business_context = context_match.group(1).strip() if context_match else f"Calculation for {formula_name}"
+            if mapping_changes:
+                business_context = f"{business_context} | Variable mapping applied: " + ", ".join(
+                    [f"{c['from']}→{c['to']}" for c in mapping_changes[:5]]
+                )
 
             return ExtractedFormula(
                 formula_name=formula_name.upper(),
                 formula_expression=formula_expression,
+                excel_formula=excel_formula,
                 variants_info="Extracted using stable chunking approach",
                 business_context=business_context,
                 source_method='stable_chunked_extraction',
@@ -854,6 +981,7 @@ def render_formula_card(formula: Dict, variant_name: str = None, highlight: bool
     import hashlib
     
     expr = formula.get("formula_expression", "")
+    excel_expr = formula.get("excel_formula", "")
     name = formula.get("formula_name", "")
     evidence = formula.get("document_evidence", "")
     context = formula.get("business_context", "")
@@ -876,6 +1004,9 @@ def render_formula_card(formula: Dict, variant_name: str = None, highlight: bool
     
     # Formula expression - compact
     st.code(expr, language="python")
+    if excel_expr:
+        st.caption("Excel-ready")
+        st.code(excel_expr, language="text")
 
     # Compact additional info
     extras = []
@@ -940,6 +1071,7 @@ def run_extraction_for_variant(variant_name: str, uploaded_files: list, target_o
                 ExtractedFormula(
                     formula_name=f['formula_name'],
                     formula_expression=f['formula_expression'],
+                    excel_formula=f.get('excel_formula', ''),
                     variants_info=f['variants_info'],
                     business_context=f['business_context'],
                     source_method=f['source_method'],
@@ -963,6 +1095,7 @@ def run_extraction_for_variant(variant_name: str, uploaded_files: list, target_o
             {
                 "formula_name": f.formula_name,
                 "formula_expression": f.formula_expression,
+                "excel_formula": f.excel_formula,
                 "business_context": f.business_context,
                 "document_evidence": f.document_evidence,
                 "is_conditional": f.is_conditional,
@@ -1449,6 +1582,7 @@ def main():
                 csv_rows.append({
                     "Formula Name": f.get("formula_name", ""),
                     "Expression": f.get("formula_expression", ""),
+                    "Excel Formula": f.get("excel_formula", ""),
                     "Is Conditional": f.get("is_conditional", False),
                     "Conditions": json.dumps(f.get("conditions", []), default=str) if f.get("conditions") else "",
                     "Business Context": f.get("business_context", ""),
@@ -1592,6 +1726,7 @@ def main():
                             "Variant": vn,
                             "Formula Name": f.get("formula_name", ""),
                             "Expression": f.get("formula_expression", ""),
+                            "Excel Formula": f.get("excel_formula", ""),
                             "Is Conditional": f.get("is_conditional", False),
                             "Conditions": json.dumps(f.get("conditions", []), default=str) if f.get("conditions") else "",
                             "Business Context": f.get("business_context", ""),
