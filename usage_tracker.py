@@ -63,8 +63,13 @@ def _ensure_session_id() -> str:
     return st.session_state["usage_session_id"]
 
 
-def _get_or_create_session(page_name: str) -> Dict[str, Any]:
-    """Get or create current session entry."""
+def _get_or_create_session(page_name: str, validate_by_documents: bool = False) -> Dict[str, Any]:
+    """Get or create current session entry.
+    
+    Args:
+        page_name: The name of the page
+        validate_by_documents: If True, only count session if it has documents
+    """
     session_id = _ensure_session_id()
     
     metrics = _load_metrics()
@@ -88,7 +93,9 @@ def _get_or_create_session(page_name: str) -> Dict[str, Any]:
     }
     
     metrics["sessions"].append(session)
-    metrics["overall"]["total_sessions"] = len(metrics["sessions"])
+    # Only count sessions that have documents (or if not validating by documents)
+    if not validate_by_documents:
+        metrics["overall"]["total_sessions"] = len(metrics["sessions"])
     _save_metrics(metrics)
     
     return session
@@ -145,8 +152,14 @@ def track_api_call(page_name: str, input_tokens: int = 0, output_tokens: int = 0
 
 
 def track_document_upload(page_name: str, count: int = 1) -> None:
-    """Track document uploads in a session (only increment once per upload batch)."""
+    """Track document uploads in a session (only increment once per upload batch).
+    Only count as a session if at least 1 document is uploaded.
+    """
     try:
+        # Only track if count > 0
+        if count <= 0:
+            return
+            
         session_id = _ensure_session_id()
         metrics = _load_metrics()
         
@@ -158,11 +171,16 @@ def track_document_upload(page_name: str, count: int = 1) -> None:
                 break
         
         if not session:
-            session = _get_or_create_session(page_name)
+            session = _get_or_create_session(page_name, validate_by_documents=True)
         
-        # Only increment if it's truly a new upload (not already counted)
+        # Only increment if it's the first upload (marking session as valid/countable)
         prev_count = session.get("document_count", 0)
         session["document_count"] = prev_count + count
+        
+        # Only increment total_sessions if this is the first document in this session
+        if prev_count == 0:
+            metrics["overall"]["total_sessions"] = metrics["overall"].get("total_sessions", 0) + 1
+            
         metrics["overall"]["total_documents"] = metrics["overall"].get("total_documents", 0) + count
         
         _save_metrics(metrics)
