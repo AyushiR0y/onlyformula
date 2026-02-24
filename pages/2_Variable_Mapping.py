@@ -708,6 +708,7 @@ def apply_mappings_to_formulas(formulas: List[Dict], header_to_var_mapping: Dict
     header_to_var_mapping format: { "Excel_Header": "VariableName" }
     Formula: "VariableName * 2"
     Result: "[Excel_Header] * 2"
+    Prefers excel_formula if available, falls back to formula_expression.
     """
     mapped_formulas = []
     
@@ -716,8 +717,10 @@ def apply_mappings_to_formulas(formulas: List[Dict], header_to_var_mapping: Dict
     
     
     for formula in formulas:
-        expr = formula.get('formula_expression', '')
-        original_expr = expr
+        # Prefer excel_formula if available; otherwise use formula_expression
+        expr = formula.get('excel_formula', '') or formula.get('formula_expression', '')
+        original_expr = formula.get('formula_expression', '')
+        original_excel = formula.get('excel_formula', '')
         
         # Replace each variable with its corresponding header
         for var_name, excel_header in var_to_header.items():
@@ -728,7 +731,8 @@ def apply_mappings_to_formulas(formulas: List[Dict], header_to_var_mapping: Dict
         
         mapped_formulas.append({
             'formula_name': formula.get('formula_name', ''),
-            'original_expression': formula.get('formula_expression', ''),
+            'original_expression': original_expr,
+            'original_excel_formula': original_excel,
             'mapped_expression': expr
         })
     
@@ -1269,10 +1273,16 @@ def main():
                     disabled=True,  # Prevent editing the source
                     width="large"
                 ),
+                "original_excel_formula": st.column_config.TextColumn(
+                    "Original Excel Formula", 
+                    disabled=True,
+                    width="large",
+                    help="Auto-generated Excel version from extraction (read-only)"
+                ),
                 "mapped_expression": st.column_config.TextColumn(
                     "Mapped Expression", 
                     width="large",
-                    help="Edit the formula here. Changes are saved automatically."
+                    help="Edit the formula here to customize variable mapping."
                 ),
             },
             use_container_width=True,

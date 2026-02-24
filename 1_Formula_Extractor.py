@@ -598,6 +598,64 @@ class StableChunkedDocumentFormulaExtractor:
             elif token in self.basic_derived:
                 specific_variables[token] = self.basic_derived[token]
         return specific_variables
+    
+    def _normalize_variable_aliases(self, expression: str) -> Tuple[str, List[Dict[str, str]]]:
+        """
+        Normalize known aliases/synonyms to standard variable names.
+        Returns: (normalized_expression, list_of_substitutions)
+        """
+        aliases = {
+            # Paid-up SA variants
+            r'\bpresent_value_of_paid_up_sa_on_death\b': 'PAID_UP_SA_ON_DEATH',
+            r'\bpresent_value.*paid.*up.*sa.*death\b': 'PAID_UP_SA_ON_DEATH',
+            r'\bpv_paid_up_sa_on_death\b': 'PAID_UP_SA_ON_DEATH',
+            r'\bpaid_up_sa_on_death_pv\b': 'PAID_UP_SA_ON_DEATH',
+            
+            # Paid-up SA (base)
+            r'\bpaid.*up.*sum.*assured\b': 'PAID_UP_SA',
+            r'\bpaidupsa\b': 'PAID_UP_SA',
+            r'\bpaid_up_sa_value\b': 'PAID_UP_SA',
+            
+            # Income benefit variants
+            r'\bpaid.*up.*income.*benefit\b': 'PAID_UP_INCOME_INSTALLMENT',
+            r'\bincome_instalment\b': 'PAID_UP_INCOME_INSTALLMENT',
+            r'\bincome_installment\b': 'PAID_UP_INCOME_INSTALLMENT',
+            r'\bpaid_up_income_benefit\b': 'PAID_UP_INCOME_INSTALLMENT',
+            
+            # 10x AP variants
+            r'\bten_times_ap\b': 'TEN_TIMES_AP',
+            r'\b10.*ap\b': 'TEN_TIMES_AP',
+            
+            # Total Premium variants
+            r'\btotal_premiums_paid\b': 'TOTAL_PREMIUM_PAID',
+            r'\brop_benefit\b': 'TOTAL_PREMIUM_PAID',
+            r'\breturn_of_premium\b': 'TOTAL_PREMIUM_PAID',
+            
+            # GSV/Surrender variants
+            r'\bguaranteed_surrender_value\b': 'GSV',
+            r'\bsurrender_value_guaranteed\b': 'GSV',
+            
+            # SSV variants
+            r'\bspecial.*surrender.*value.*1\b': 'SSV1',
+            r'\bssv_1\b': 'SSV1',
+            r'\bspecial.*surrender.*value.*2\b': 'SSV2',
+            r'\bssv_2\b': 'SSV2',
+            r'\bspecial.*surrender.*value.*3\b': 'SSV3',
+            r'\bssv_3\b': 'SSV3',
+        }
+        
+        expr = expression
+        substitutions = []
+        
+        for pattern, replacement in aliases.items():
+            matches = list(re.finditer(pattern, expr, re.IGNORECASE))
+            for match in reversed(matches):
+                old_text = match.group(0)
+                if old_text.upper() != replacement.upper():
+                    expr = expr[:match.start()] + replacement + expr[match.end():]
+                    substitutions.append({"from": old_text, "to": replacement})
+        
+        return expr, substitutions
 
     def _extract_formula_with_context(self, formula_name: str, context: str) -> Optional[ExtractedFormula]:
         prompt = f"""TASK: Extract calculation formulas for variables from a document.
@@ -684,6 +742,32 @@ Terminal bonus is typically a one-time additional payout calculated as a product
 - **If bonus appears in tables**: Look for separate rows/columns for "Terminal Bonus rate", "Terminal Bonus on Maturity", "Terminal Bonus on Surrender"
 - **Conditional bonus**: Mark IS_CONDITIONAL = YES if bonus formula changes based on surrender vs. maturity or other conditions
 - **Include bonus in final values**: If terminal bonus is part of the final payout, express as: Final_Value = Base_Value + (TERMINAL_BONUS_RATE × DURATION × BENEFIT_BASE)
+
+STEP 4B: STRENGTHEN WEAK-FORMULA TARGETS (PAID_UP_SA, TEN_TIMES_AP, PAID_UP_INCOME_INSTALLMENT)
+For these specific target variables, apply extra scrutiny and search breadth:
+
+**PAID_UP_SA (Paid-Up Sum Assured):**
+  - Look for: "Paid-up sum assured", "paid-up SA", "paid-up benefit", "paid-up guaranteed SA"
+  - Definition: Usually PARTIAL or FULL sum assured retained after non-payment of premiums based on no_of_premium_paid and a paid-up factor
+  - Formula structure: Base_SA × Paid_Up_Factor(years) or SUM_ASSURED × (no_of_premium_paid / total_years) or MAX(0, SUM_ASSURED * factor)
+  - Search for references to tables like "Paid-up factors by year" or sections defining when policy goes paid-up
+  - Map existing variables: no_of_premium_paid, SUM_ASSURED, PAID_UP_FACTOR (or similar), PREMIUM_TERM, BENEFIT_TERM
+  - If exact formula unclear: estimate from stepped examples (e.g., "Year 1: 20%, Year 2: 40%, Year 3: 60%") and express as MAX(0, SUM_ASSURED * interpolated_factor)
+
+**TEN_TIMES_AP (10 × Annual Premium):**
+  - Look for: "ten times annual premium", "10 AP", "10× annual premium", "10 times premium"
+  - Definition: Simplest—exactly 10 multiplied by the annual/full-term premium
+  - Formula: 10 * FULL_TERM_PREMIUM (or multiply by annual premium columninput if different)
+  - CRITICAL: Do NOT overcomplicate—this is straightforward. If document shows "10 * annual_premium", that IS the formula.
+  - Confirm: Search for phrases ensuring it's 10x (not 5x, 15x, or other multipliers), and annual premium (not total premiums paid)
+
+**PAID_UP_INCOME_INSTALLMENT (Paid-Up Income Benefit Installment):**
+  - Look for: "Paid-up income benefit", "income installment", "paid-up income", "income continuation", "income on paid-up basis"
+  - Definition: Continued income benefit payout (annual or periodic) after policy becomes paid-up, usually reduced proportionally
+  - Formula structure: Income_Benefit_Amount × (no_of_premium_paid / PREMIUM_TERM) or Income_Benefit_Amount × PaidUpFactor or MAX(0, Income_Benefit_Amount * factor)
+  - Search for: "income table", "benefit continuation table", stepped percentages (e.g., "50% if years ≥ 5, 75% if ≥ 10")
+  - Map to variables: Income_Benefit_Amount, no_of_premium_paid, PREMIUM_TERM, BENEFIT_TERM
+  - If exact formula unclear: extract from stepped/tiered table by identifying pattern (e.g., linear ramp: (years/PREMIUM_TERM) * base, or use MAX/MIN with tiers)
 
 STEP 5: IDENTIFY VARIABLES USED (STRICT VARIABLE POLICY)
 List only variables that appear in:
@@ -830,7 +914,8 @@ TARGET OUTPUT VARIABLES:
             formula_match = re.search(r'FORMULA_EXPRESSION:\s*(.+?)(?=\nEXCEL_FORMULA|\nIS_CONDITIONAL|\nVARIABLES_USED|$)', response_text, re.DOTALL | re.IGNORECASE)
             formula_expression = formula_match.group(1).strip() if formula_match else "Formula not clearly defined"
             formula_expression = self._clean_formula_expression(formula_expression)
-            formula_expression, mapping_changes = self._prefer_known_variables(formula_expression)
+            formula_expression, pref_changes = self._prefer_known_variables(formula_expression)
+            formula_expression, alias_changes = self._normalize_variable_aliases(formula_expression)
 
             excel_formula_match = re.search(r'EXCEL_FORMULA:\s*(.+?)(?=\nVARIABLES_USED|\nDOCUMENT_EVIDENCE|$)', response_text, re.DOTALL | re.IGNORECASE)
             excel_formula = excel_formula_match.group(1).strip() if excel_formula_match else ""
@@ -848,6 +933,7 @@ TARGET OUTPUT VARIABLES:
                     cond_lines = re.findall(r'-\s*CONDITION_\d+:\s*(.+?)\s*\|\s*EXPRESSION_\d+:\s*(.+)', conditions_text)
                     for cond, expr in cond_lines:
                         cleaned_expr, _ = self._prefer_known_variables(self._clean_formula_expression(expr.strip()))
+                        cleaned_expr, _ = self._normalize_variable_aliases(cleaned_expr)
                         conditions.append({"condition": cond.strip(), "expression": cleaned_expr})
 
             variables_match = re.search(r'VARIABLES_USED:\s*(.+?)(?=\nDOCUMENT_EVIDENCE|$)', response_text, re.DOTALL | re.IGNORECASE)
@@ -860,10 +946,11 @@ TARGET OUTPUT VARIABLES:
 
             context_match = re.search(r'BUSINESS_CONTEXT:\s*(.+?)$', response_text, re.DOTALL | re.IGNORECASE)
             business_context = context_match.group(1).strip() if context_match else f"Calculation for {formula_name}"
-            if mapping_changes:
-                business_context = f"{business_context} | Variable mapping applied: " + ", ".join(
-                    [f"{c['from']}→{c['to']}" for c in mapping_changes[:5]]
-                )
+            
+            all_changes = pref_changes + alias_changes
+            if all_changes:
+                change_desc = ", ".join([f"{c.get('from','?')}→{c.get('to','?')}" for c in all_changes[:5]])
+                business_context = f"{business_context} | Variable normalization: {change_desc}"
 
             return ExtractedFormula(
                 formula_name=formula_name.upper(),
