@@ -102,11 +102,14 @@ def _get_or_create_session(page_name: str, validate_by_documents: bool = False) 
 
 
 def track_page_visit(page_name: str) -> None:
-    """Track a page visit and ensure session exists."""
+    """Track a page visit and ensure session ID exists.
+    
+    Note: Does NOT create a session record. Session records are only created
+    when documents are uploaded. This prevents counting sessions without uploads.
+    """
     try:
         _ensure_session_id()
-        session = _get_or_create_session(page_name)
-        print(f"[usage_tracker] Page '{page_name}' visited ({session['session_id']})")
+        print(f"[usage_tracker] Page '{page_name}' visited - session ID ensured")
     except Exception as e:
         print(f"[usage_tracker] Failed to track page visit: {e}")
 

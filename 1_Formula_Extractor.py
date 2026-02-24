@@ -506,197 +506,70 @@ class StableChunkedDocumentFormulaExtractor:
         return combined_text
 
     def _extract_formula_with_context(self, formula_name: str, context: str) -> Optional[ExtractedFormula]:
-        prompt = f"""TASK: Extract calculation formulas for variables from a document.
-
-YOUR ROLE: Carefully read the provided document and extract ONLY what is explicitly stated. Do not invent, assume, or use external knowledge to fill gaps. Your primary source of truth is the document content.
-
-TARGET VARIABLE: {formula_name}
-
-STEP 1: SCAN FOR EXPLICIT FORMULAS
-Search the document for any of these patterns:
-- Direct assignments: "{formula_name} = ...", "{formula_name}: ...", "{formula_name} is calculated as ..."
-- Table rows where the left cell contains "{formula_name}" or a close variant
-- Sections labeled "{formula_name}", "Calculation of {formula_name}", etc.
-- Numbered lists or bullet points defining "{formula_name}"
-- Mathematical expressions with variable names matching available variables
-- **Working examples or sample calculations** showing "{formula_name}" with concrete values (these demonstrate the formula structure)
-
-STEP 2: EXTRACT EXACTLY AS PRESENTED
-If found, extract the formula EXACTLY as stated in the document:
-- Preserve variable names exactly (e.g., if document says "PAID_UP_SA_ON_DEATH", use that, not variations)
-- If multiple branches exist (different conditions), extract ALL of them
-- If it's a table with rows/columns, extract the cell values as-is with their conditions
-- If there are units, percentages, or multipliers, include them as written
-- **If only examples are found** (e.g., "Example: GSV = 100,000 * 0.9 * 5 = 450,000"), reverse-engineer the formula pattern by identifying:
-  * Which numbers are constants/factors vs. variable values
-  * The mathematical operations used (multiplication, addition, MAX, etc.)
-  * The general structure (e.g., "GSV = TOTAL_PREMIUM * GSV_FACTOR * years")
-  * Include the example in DOCUMENT_EVIDENCE and note it's from a worked example
-
-STEP 3: ANALYZE WORKED EXAMPLES (if formula definition not found)
-If no direct formula is stated but examples exist:
-- Look for phrases like "Example:", "For instance:", "Sample calculation:", "Illustration:", "Consider:"
-- Examine the calculation steps shown with actual numbers
-- **Identify the pattern**: Replace concrete numbers with their corresponding variable names
-- Check if multiple examples exist (they may show different conditional branches)
-- Preserve the exact mathematical structure (operators, parentheses, order of operations)
-- Note in DOCUMENT_EVIDENCE that formula was derived from example(s)
-
-Example of reverse-engineering:
-Document says: "Example: GSV for year 5 = ₹1,00,000 (total premium) × 0.85 (factor) = ₹85,000"
-Extract as: "TOTAL_PREMIUM * GSV_FACTOR"
-
-STEP 4: DETECT CONDITIONAL STRUCTURES
-Check if the formula has conditions:
-- "if/then/else" statements
-- Tiered structures ("for years 1-3", "for years 4+", etc.)
-- Multiple cases in a table (different rows = different conditions)
-- MAX/MIN selections between multiple options
-- **Multiple examples with different scenarios** (e.g., "Example 1 (year 2): ...", "Example 2 (year 5): ...")
-If conditional, extract ALL branches and their conditions
-
-STEP 4A: HANDLE TERMINAL BONUS & SPECIAL PAYOUTS
-Terminal bonus is typically a one-time additional payout calculated as a product of rate, duration, and benefit base. Watch for:
-- Phrases: "terminal bonus", "final bonus", "loyalty bonus", "maturity bonus", "bonus at maturity", "bonus on surrender"
-
-**CRITICAL: Distinguish between "DECLARATION" and "FORMULA DEFINITION":**
-- ✗ SKIP/IGNORE statements like: "Terminal Bonus for surrender is declared by the Company annually" (this is just a statement about timing/governance, not a formula)
-- ✓ LOOK FOR statements like: "Terminal Bonus = rate × duration × benefit" or "Terminal Bonus on Surrender = (Terminal Bonus rate) × (Policy year) × (Paid-up GMB)"
-- If you see only a declaration ("is declared annually"), keep searching the document for the actual formula definition section
-- The actual formula will show the mathematical relationship with rate, duration, and benefit components
-
-- **CRITICAL PATTERN**: Terminal Bonus = (RATE) × (DURATION) × (BENEFIT_BASE)
-  Where:
-  * RATE = Terminal Bonus rate (usually a percentage or decimal factor like 0.02, 2%, etc.)
-  * DURATION = Policy duration (could be "Policy year of surrender" OR "Policy term" OR elapsed years, etc.)
-  * BENEFIT_BASE = The benefit being used as the base (e.g., "Guaranteed Maturity Benefit", "Paid-up Guaranteed Maturity Benefit", "Sum Assured", etc.)
-  
-- **Look for statements like**:
-  * "Terminal Bonus on Surrender = (rate) × (policy year) × (Paid-up GMB)"
-  * "Terminal Bonus on Maturity = (rate) × (policy term) × (GMB)"
-  * "Bonus = Terminal bonus rate × Years × Guaranteed benefit"
-  * Variations where the order changes but three components multiply: A × B × C where A is rate, B is time, C is benefit
-  * Table headers or sections titled "Formula for Terminal Bonus", "Terminal Bonus Calculation", "How Terminal Bonus is Computed"
-
-- **Extract ALL variants**: Different formulas may apply for different scenarios (surrender vs. maturity, different time periods)
-- **Map to variables**: Identify which available variables correspond to rate, duration, and benefit components
-  * Terminal bonus rate might be: TERMINAL_BONUS_RATE, BONUS_RATE, or a fixed percentage value
-  * Duration could be: Policy_year_of_surrender, policy_term, no_of_premium_paid, elapsed_policy_duration, or similar
-  * Benefit base could be: GMB, PAID_UP_GMB, GUARANTEED_MATURITY_BENEFIT, SUM_ASSURED, or similar
-  
-- **Do NOT reduce to "declared value"**: Terminal Bonus is NOT a lookup value - it's a calculated multiplier. Extract the actual multiplier formula.
-- **If bonus appears in tables**: Look for separate rows/columns for "Terminal Bonus rate", "Terminal Bonus on Maturity", "Terminal Bonus on Surrender"
-- **Conditional bonus**: Mark IS_CONDITIONAL = YES if bonus formula changes based on surrender vs. maturity or other conditions
-- **Include bonus in final values**: If terminal bonus is part of the final payout, express as: Final_Value = Base_Value + (TERMINAL_BONUS_RATE × DURATION × BENEFIT_BASE)
-
-STEP 5: IDENTIFY VARIABLES USED
-List only variables that appear in:
-- The extracted formula expression itself
-- Worked examples (map concrete values to variable names from context)
-- Variable names: {', '.join(self.input_variables.keys())}
-Do not invent variables; only list what appears in the formula or can be clearly mapped from examples.
-
-STEP 6: LOCATE SUPPORTING EVIDENCE
-Quote the exact text from the document that defines this formula:
-- If from a table: include table caption/title, row labels, column headers, and cell content
-- If from text: provide the sentence or paragraph verbatim
-- **If from examples**: include the complete example text showing the calculation with values
-- Mark as "INFERRED" ONLY if: (1) formula structure is explicitly shown but variable names aren't fully spelled out, OR (2) you derived the formula from worked examples with concrete numbers
-
-STEP 7: FORMAT RESPONSE
-Use the structure below. Respond with ONLY this format, no explanations.
-
----
-
-DOCUMENT_EVIDENCE: [Exact verbatim text from document. For tables: "Table X.Y - [Title]. Row '[label]', Columns: [headers]. Cell values: [content]". For text: Direct quote. For examples: Full example text. If INFERRED from examples: "Derived from example: [quote example]"]
-
-IS_CONDITIONAL: [YES only if document explicitly shows conditions/branches or multiple examples show different scenarios; otherwise NO]
-
-CONDITIONS: [Only if IS_CONDITIONAL = YES. List each as:
-- CONDITION_[N]: [exact condition from document or from example context] | EXPRESSION_[N]: [the formula for that condition]]
-
-FORMULA_EXPRESSION: [The formula exactly as found. If reverse-engineered from examples, show the pattern with variable names. If conditional, use Python-style inline: "value_if_true if condition else value_if_false" or multi-line if complex]
-
-VARIABLES_USED: [Comma-separated list of variables that appear in the FORMULA_EXPRESSION]
-
-BUSINESS_CONTEXT: [One sentence explaining what this calculates, based on the document context]
-
----
-
-CRITICAL GUARDRAILS:
-✓ DO extract formulas exactly as they appear in the document (including variable names, operators, numbers)
-✓ DO analyze worked examples and reverse-engineer formula patterns from them
-✓ DO preserve conditional logic and all branches if present
-✓ DO quote document evidence directly (including examples)
-✓ DO list only variables that appear in the formula itself or are clearly represented in examples
-✓ DO map concrete values in examples to their corresponding variable names using context clues
-✓ DO extract Terminal Bonus as a COMPONENT-BASED CALCULATION: (rate) × (duration) × (benefit), NOT as a single "declared value"
-✓ DO identify the three components of Terminal Bonus: rate factor, time/duration measure, and benefit base
-✓ DO extract ALL Terminal Bonus variants if found (on Maturity vs. on Surrender may have different formulas)
-✗ DO NOT assume or invent formulas if not found in document or examples
-✗ DO NOT infer "industry standard" calculations without document basis
-✗ DO NOT skip or modify variable names
-✗ DO NOT ignore worked examples - they are valid formula sources
-✗ DO NOT add explanatory notes outside the specified format
-✗ DO NOT reduce Terminal Bonus to a single declared value - always extract the multiplier formula structure
-✗ DO NOT treat Terminal Bonus rate as the complete formula - it must be multiplied by duration and benefit base
-
-TERMINAL BONUS EXTRACTION EXAMPLE:
-If document states: "Terminal Bonus on Surrender = (Terminal Bonus rate) × (Policy year of surrender) × (Paid up Guaranteed Maturity Benefit)"
-Extract as: 
-  FORMULA_EXPRESSION: TERMINAL_BONUS_RATE * policy_year_of_surrender * PAID_UP_GMB
-  IS_CONDITIONAL: YES
-  CONDITIONS:
-  - CONDITION_1: On Surrender | EXPRESSION_1: TERMINAL_BONUS_RATE * policy_year_of_surrender * PAID_UP_GMB
-
-If document shows multiple scenarios, extract as:
-  FORMULA_EXPRESSION: (TERMINAL_BONUS_RATE * policy_year_of_surrender * PAID_UP_GMB) if surrender else (TERMINAL_BONUS_RATE * POLICY_TERM * GMB)
-  IS_CONDITIONAL: YES
-  CONDITIONS:
-  - CONDITION_1: On Surrender | EXPRESSION_1: TERMINAL_BONUS_RATE * policy_year_of_surrender * PAID_UP_GMB
-  - CONDITION_2: On Maturity | EXPRESSION_2: TERMINAL_BONUS_RATE * POLICY_TERM * GMB
+        prompt = f"""Extract the formula for "{formula_name}" from this insurance document.
 
 DOCUMENT CONTEXT:
 {context}
 
-AVAILABLE VARIABLES (reference only):
+AVAILABLE VARIABLES:
 {', '.join(self.input_variables.keys())}
+
+EXTRACTION RULES:
+1. Find explicit formulas (equations, tables, or worked examples with numbers)
+2. If examples exist, reverse-engineer the pattern (e.g., "100000 * 0.9 * 5" → "TOTAL_PREMIUM * GSV_FACTOR * years")
+3. Use ONLY variables from the available list above
+4. For conditionals (if/then, tiers, MAX/MIN), capture ALL branches
+5. If formula not found, return "NOT_FOUND"
+
+OUTPUT FORMAT (strict):
+DOCUMENT_EVIDENCE: [Verbatim quote or "NOT_FOUND"]
+IS_CONDITIONAL: [YES or NO]
+CONDITIONS: [If YES: "CONDITION_1: [text] | EXPRESSION_1: [formula]" etc.]
+FORMULA_EXPRESSION: [Math expression or "NOT_FOUND"]
+VARIABLES_USED: [Comma-separated list]
+BUSINESS_CONTEXT: [One sentence or "Not found"]
 """
 
-        models_to_try = ["gpt-3.5-turbo", "gpt-4o-mini", "gpt-4"]
+        try:
+            response = client.chat.completions.create(
+                model=DEPLOYMENT_NAME,
+                messages=[
+                    {"role": "system", "content": "You are a precise formula extraction assistant. Extract formulas exactly as documented. Return NOT_FOUND if a formula is not present in the document."},
+                    {"role": "user", "content": prompt}
+                ],
+                max_tokens=800,
+                temperature=0.0,
+                top_p=1.0
+            )
+            input_tokens = response.usage.prompt_tokens if response.usage else 0
+            output_tokens = response.usage.completion_tokens if response.usage else 0
+            track_api_call("Formula Extractor", input_tokens=input_tokens, output_tokens=output_tokens, purpose="formula_extraction")
+            
+            response_text = response.choices[0].message.content
+            parsed_formula = self._parse_stable_formula_response(response_text, formula_name)
+            
+            if parsed_formula:
+                return parsed_formula
+            else:
+                # Model returned NOT_FOUND or unparseable, try offline
+                offline_result = self._extract_formula_offline(formula_name, context)
+                if offline_result:
+                    return offline_result
+                return self._create_placeholder_formula(formula_name, "Not found in document")
 
-        for model in models_to_try:
-            try:
-                response = client.chat.completions.create(
-                    model=DEPLOYMENT_NAME,
-                    messages=[{"role": "user", "content": prompt}],
-                    max_tokens=1200,
-                    temperature=0.1,
-                    top_p=0.95
-                )
-                input_tokens = response.usage.prompt_tokens if response.usage else 0
-                output_tokens = response.usage.completion_tokens if response.usage else 0
-                track_api_call("Formula Extractor", input_tokens=input_tokens, output_tokens=output_tokens, purpose="formula_extraction")
-                response_text = response.choices[0].message.content
-                parsed_formula = self._parse_stable_formula_response(response_text, formula_name)
-                if parsed_formula:
-                    return parsed_formula
-
-            except Exception as e:
-                error_msg = str(e)
-                if "429" in error_msg or "quota" in error_msg.lower():
-                    time.sleep(2)
-                    continue
-                elif "404" in error_msg or "model" in error_msg.lower():
-                    continue
-                else:
-                    st.error(f"❌ Error with {model} for {formula_name}: {e}")
-                    continue
-
-        offline_result = self._extract_formula_offline(formula_name, context)
-        if offline_result is None:
-            return self._create_placeholder_formula(formula_name, "No extraction possible")
-        return offline_result
+        except Exception as e:
+            error_msg = str(e)
+            if "429" in error_msg or "quota" in error_msg.lower():
+                st.warning(f"⚠️ Rate limit for {formula_name}")
+                time.sleep(2)
+            else:
+                st.warning(f"⚠️ API error for {formula_name}: {str(e)[:60]}")
+            
+            # Fall back to offline
+            offline_result = self._extract_formula_offline(formula_name, context)
+            if offline_result:
+                return offline_result
+            return self._create_placeholder_formula(formula_name, "Extraction error")
 
     def _create_placeholder_formula(self, formula_name: str, reason: str) -> ExtractedFormula:
         return ExtractedFormula(
@@ -713,46 +586,55 @@ AVAILABLE VARIABLES (reference only):
 
     def _parse_stable_formula_response(self, response_text: str, formula_name: str) -> Optional[ExtractedFormula]:
         try:
-            formula_match = re.search(r'FORMULA_EXPRESSION:\s*(.+?)(?=\nIS_CONDITIONAL|\nVARIABLES_USED|$)', response_text, re.DOTALL | re.IGNORECASE)
-            formula_expression = formula_match.group(1).strip() if formula_match else "Formula not clearly defined"
+            # Check for NOT_FOUND first
+            if "NOT_FOUND" in response_text.upper() and "FORMULA_EXPRESSION:" in response_text.upper():
+                formula_check = re.search(r'FORMULA_EXPRESSION:\s*(.+?)(?=\n|$)', response_text, re.IGNORECASE)
+                if formula_check and "NOT_FOUND" in formula_check.group(1).upper():
+                    return None
+            
+            formula_match = re.search(r'FORMULA_EXPRESSION:\s*(.+?)(?=\nIS_CONDITIONAL|\nVARIABLES_USED|\nBUSINESS_CONTEXT|$)', response_text, re.DOTALL | re.IGNORECASE)
+            formula_expression = formula_match.group(1).strip() if formula_match else None
+            
+            if not formula_expression or formula_expression.upper() == "NOT_FOUND":
+                return None
 
             is_conditional_match = re.search(r'IS_CONDITIONAL:\s*(YES|NO)', response_text, re.IGNORECASE)
             is_conditional = is_conditional_match and is_conditional_match.group(1).upper() == "YES"
 
             conditions = None
             if is_conditional:
-                conditions_block = re.search(r'CONDITIONS:\s*(.+?)(?=\nVARIABLES_USED|$)', response_text, re.DOTALL | re.IGNORECASE)
+                conditions_block = re.search(r'CONDITIONS:\s*(.+?)(?=\nFORMULA_EXPRESSION|\nVARIABLES_USED|$)', response_text, re.DOTALL | re.IGNORECASE)
                 if conditions_block:
                     conditions_text = conditions_block.group(1)
                     conditions = []
-                    cond_lines = re.findall(r'-\s*CONDITION_\d+:\s*(.+?)\s*\|\s*EXPRESSION_\d+:\s*(.+)', conditions_text)
+                    cond_lines = re.findall(r'-?\s*CONDITION_\d*:\s*(.+?)\s*\|\s*EXPRESSION_\d*:\s*(.+?)(?=\n|$)', conditions_text)
                     for cond, expr in cond_lines:
                         conditions.append({"condition": cond.strip(), "expression": expr.strip()})
 
-            variables_match = re.search(r'VARIABLES_USED:\s*(.+?)(?=\nDOCUMENT_EVIDENCE|$)', response_text, re.DOTALL | re.IGNORECASE)
+            variables_match = re.search(r'VARIABLES_USED:\s*(.+?)(?=\n[A-Z_]+:|$)', response_text, re.DOTALL | re.IGNORECASE)
             variables_str = variables_match.group(1).strip() if variables_match else ""
             specific_variables = self._parse_variables_stable(variables_str)
 
-            evidence_match = re.search(r'DOCUMENT_EVIDENCE:\s*(.+?)(?=\nBUSINESS_CONTEXT|$)', response_text, re.DOTALL | re.IGNORECASE)
-            document_evidence = evidence_match.group(1).strip() if evidence_match else "No supporting evidence found"
+            evidence_match = re.search(r'DOCUMENT_EVIDENCE:\s*(.+?)(?=\n[A-Z_]+:|$)', response_text, re.DOTALL | re.IGNORECASE)
+            document_evidence = evidence_match.group(1).strip() if evidence_match else "No supporting evidence"
 
-            context_match = re.search(r'BUSINESS_CONTEXT:\s*(.+?)$', response_text, re.DOTALL | re.IGNORECASE)
+            context_match = re.search(r'BUSINESS_CONTEXT:\s*(.+?)(?=\n[A-Z_]+:|$)', response_text, re.DOTALL | re.IGNORECASE)
             business_context = context_match.group(1).strip() if context_match else f"Calculation for {formula_name}"
 
             return ExtractedFormula(
                 formula_name=formula_name.upper(),
                 formula_expression=formula_expression,
-                variants_info="Extracted using stable chunking approach",
+                variants_info="Extracted using AI",
                 business_context=business_context,
-                source_method='stable_chunked_extraction',
-                document_evidence=document_evidence[:800],
+                source_method='ai_extraction',
+                document_evidence=document_evidence[:500] if document_evidence else "No evidence",
                 specific_variables=specific_variables,
                 is_conditional=is_conditional,
                 conditions=conditions,
             )
 
         except Exception as e:
-            st.error(f"Error parsing response for {formula_name}: {e}")
+            st.warning(f"Parse error for {formula_name}: {str(e)[:100]}")
             return None
 
     def _parse_variables_stable(self, variables_str: str) -> Dict[str, str]:
