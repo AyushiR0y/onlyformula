@@ -1,0 +1,18 @@
+{
+  "last_updated": "2026-02-24T07:35:09.809970+00:00",
+  "overall": {
+    "app_sessions": 1,
+    "page_views_total": 2,
+    "api_calls_total": 3
+  },
+  "pages": {
+    "Test Page 1": {
+      "page_views": 1,
+      "api_calls": 2
+    },
+    "Test Page 2": {
+      "page_views": 1,
+      "api_calls": 1
+    }
+  }
+}

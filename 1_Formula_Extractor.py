@@ -380,7 +380,6 @@ class StableChunkedDocumentFormulaExtractor:
 
     def _check_api_status(self) -> bool:
         try:
-            track_api_call("Formula Extractor")
             client.chat.completions.create(
                 model=DEPLOYMENT_NAME,
                 messages=[{"role": "user", "content": "Test"}],
@@ -668,7 +667,6 @@ AVAILABLE VARIABLES (reference only):
 
         for model in models_to_try:
             try:
-                track_api_call("Formula Extractor")
                 response = client.chat.completions.create(
                     model=DEPLOYMENT_NAME,
                     messages=[{"role": "user", "content": prompt}],
@@ -676,6 +674,7 @@ AVAILABLE VARIABLES (reference only):
                     temperature=0.1,
                     top_p=0.95
                 )
+                track_api_call("Formula Extractor")
                 response_text = response.choices[0].message.content
                 parsed_formula = self._parse_stable_formula_response(response_text, formula_name)
                 if parsed_formula:

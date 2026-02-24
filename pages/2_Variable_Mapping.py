@@ -387,14 +387,14 @@ class VariableHeaderMatcher:
 
     Output ONLY valid JSON, no other text."""
 
-            track_api_call("Variable Mapping")
-
             response = client.chat.completions.create(
                 model=DEPLOYMENT_NAME,
                 messages=[{"role": "user", "content": prompt}],
                 max_tokens=3000,  # JSON is compact
                 temperature=0.0
             )
+            
+            track_api_call("Variable Mapping")
             
             response_text = response.choices[0].message.content.strip()
             
