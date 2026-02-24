@@ -3,7 +3,7 @@ import json
 import streamlit as st
 from dotenv import load_dotenv
 
-from usage_tracker import get_usage_metrics, track_page_visit
+from usage_tracker import get_usage_metrics, track_page_visit, reset_all_sessions, delete_session
 
 
 load_dotenv()
@@ -153,7 +153,77 @@ def _render_dashboard() -> None:
         st.info("No usage data captured yet.")
 
     st.markdown("---")
-    st.caption(f"Last Updated (UTC): {metrics.get('last_updated', 'N/A')}")
+    st.subheader("Session Management")
+
+    col_reset, col_spacer = st.columns([1, 3])
+    with col_reset:
+        if st.button("🔄 Reset All Sessions", type="secondary", use_container_width=True):
+            st.session_state["show_reset_confirm"] = True
+
+    # Show confirmation dialog
+    if st.session_state.get("show_reset_confirm", False):
+        st.warning("⚠️ This will DELETE all sessions and reset all metrics. This cannot be undone.")
+        col_confirm, col_cancel = st.columns(2)
+        with col_confirm:
+            if st.button("✅ Confirm Reset", type="primary", use_container_width=True):
+                reset_all_sessions()
+                st.session_state["show_reset_confirm"] = False
+                st.success("✅ All sessions have been reset.")
+                st.rerun()
+        with col_cancel:
+            if st.button("❌ Cancel", use_container_width=True):
+                st.session_state["show_reset_confirm"] = False
+                st.rerun()
+
+    st.markdown("---")
+    st.subheader("Delete Individual Sessions")
+
+    if sessions:
+        st.info("ℹ️ Select sessions below to remove them from metrics (they won't be counted).")
+        
+        for idx, session in enumerate(sorted(sessions, key=lambda x: x["started_at"], reverse=True)):
+            col_session, col_delete = st.columns([4, 1])
+            
+            session_display = (
+                f"{session['session_id']} | {session['page']} | "
+                f"Started: {session['started_at'][:16]} | "
+                f"Docs: {session.get('document_count', 0)} | "
+                f"API Calls: {len(session.get('api_calls', []))}"
+            )
+            
+            with col_session:
+                st.text(session_display)
+            
+            with col_delete:
+                if st.button("🗑️ Delete", key=f"delete_session_{idx}_{session['uuid'][:8]}", use_container_width=True):
+                    # Show confirmation
+                    st.session_state[f"delete_confirm_{session['uuid']}"] = True
+            
+            # Show confirmation for this session
+            if st.session_state.get(f"delete_confirm_{session['uuid']}", False):
+                col_confirm_del, col_cancel_del = st.columns(2)
+                with col_confirm_del:
+                    if st.button(
+                        "✅ Confirm Delete",
+                        key=f"confirm_del_{session['uuid'][:8]}",
+                        type="primary",
+                        use_container_width=True
+                    ):
+                        delete_session(session["uuid"], session["page"])
+                        st.session_state[f"delete_confirm_{session['uuid']}"] = False
+                        st.success(f"✅ Session {session['session_id']} deleted.")
+                        st.rerun()
+                
+                with col_cancel_del:
+                    if st.button(
+                        "❌ Cancel",
+                        key=f"cancel_del_{session['uuid'][:8]}",
+                        use_container_width=True
+                    ):
+                        st.session_state[f"delete_confirm_{session['uuid']}"] = False
+                        st.rerun()
+
+    st.markdown("---")
     st.caption(f"GPT-4o Pricing: ₹{INPUT_COST_PER_1K_INR:.4f} per 1K input tokens | ₹{OUTPUT_COST_PER_1K_INR:.4f} per 1K output tokens (USD to INR: {USD_TO_INR})")
 
     st.download_button(
@@ -171,6 +241,10 @@ def _render_dashboard() -> None:
 
 def main() -> None:
     st.set_page_config(page_title="Admin Dashboard", page_icon="🔐", layout="wide")
+
+    # Initialize session state for confirmations
+    if "show_reset_confirm" not in st.session_state:
+        st.session_state["show_reset_confirm"] = False
 
     if not _is_authenticated():
         _show_login()

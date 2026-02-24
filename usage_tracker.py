@@ -192,3 +192,58 @@ def track_document_upload(page_name: str, count: int = 1) -> None:
 def get_usage_metrics() -> Dict[str, Any]:
     """Get all usage metrics."""
     return _load_metrics()
+
+
+def reset_all_sessions() -> None:
+    """Reset all sessions and overall metrics (admin function)."""
+    try:
+        metrics = _default_metrics()
+        _save_metrics(metrics)
+        print("[usage_tracker] All sessions and metrics have been reset")
+    except Exception as e:
+        print(f"[usage_tracker] Failed to reset sessions: {e}")
+
+
+def delete_session(session_id: str, page_name: str) -> bool:
+    """Delete a specific session by UUID and page name.
+    Returns True if deleted, False if not found.
+    """
+    try:
+        metrics = _load_metrics()
+        
+        # Find and remove the session
+        original_count = len(metrics["sessions"])
+        metrics["sessions"] = [
+            s for s in metrics["sessions"]
+            if not (s["uuid"] == session_id and s["page"] == page_name)
+        ]
+        
+        if len(metrics["sessions"]) < original_count:
+            # Session was deleted; recalculate totals
+            deleted_session = next(
+                (s for s in metrics["sessions"] if s["uuid"] == session_id and s["page"] == page_name),
+                None
+            )
+            
+            # Recalculate overall metrics from remaining sessions
+            total_sessions = len(metrics["sessions"])
+            total_docs = sum(s.get("document_count", 0) for s in metrics["sessions"])
+            total_api_calls = sum(len(s.get("api_calls", [])) for s in metrics["sessions"])
+            total_input_tokens = sum(s.get("input_tokens_total", 0) for s in metrics["sessions"])
+            total_output_tokens = sum(s.get("output_tokens_total", 0) for s in metrics["sessions"])
+            
+            metrics["overall"]["total_sessions"] = total_sessions
+            metrics["overall"]["total_documents"] = total_docs
+            metrics["overall"]["total_api_calls"] = total_api_calls
+            metrics["overall"]["input_tokens_total"] = total_input_tokens
+            metrics["overall"]["output_tokens_total"] = total_output_tokens
+            
+            _save_metrics(metrics)
+            print(f"[usage_tracker] Session {session_id[:8]}... deleted from page '{page_name}'")
+            return True
+        else:
+            print(f"[usage_tracker] Session not found: {session_id}")
+            return False
+    except Exception as e:
+        print(f"[usage_tracker] Failed to delete session: {e}")
+        return False
