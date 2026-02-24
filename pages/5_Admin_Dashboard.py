@@ -50,25 +50,54 @@ def _render_dashboard() -> None:
     overall = metrics.get("overall", {})
     pages = metrics.get("pages", {})
 
-    col1, col2, col3 = st.columns(3)
+    # GPT-4o pricing in USD
+    INPUT_COST_PER_1M_USD = 2.50
+    OUTPUT_COST_PER_1M_USD = 10.00
+    
+    # USD to INR conversion rate
+    USD_TO_INR = 83.0
+    
+    # Convert to INR
+    INPUT_COST_PER_1M_INR = INPUT_COST_PER_1M_USD * USD_TO_INR
+    OUTPUT_COST_PER_1M_INR = OUTPUT_COST_PER_1M_USD * USD_TO_INR
+
+    # Calculate overall cost
+    total_input_tokens = overall.get("input_tokens_total", 0)
+    total_output_tokens = overall.get("output_tokens_total", 0)
+    total_cost_inr = (total_input_tokens * INPUT_COST_PER_1M_INR / 1_000_000) + (total_output_tokens * OUTPUT_COST_PER_1M_INR / 1_000_000)
+
+    col1, col2, col3, col4, col5 = st.columns(5)
     with col1:
         st.metric("App Sessions", overall.get("app_sessions", 0))
     with col2:
         st.metric("Total Page Views", overall.get("page_views_total", 0))
     with col3:
         st.metric("Total API Calls", overall.get("api_calls_total", 0))
+    with col4:
+        st.metric("Total Tokens", f"{total_input_tokens + total_output_tokens:,}")
+    with col5:
+        st.metric("Total Cost (GPT-4o)", f"₹{total_cost_inr:.2f}")
 
     st.markdown("---")
-    st.subheader("Per Page Usage")
+    st.subheader("Per Page Usage & Costs")
 
     if pages:
         page_rows = []
         for page_name, page_data in sorted(pages.items()):
+            input_tokens = page_data.get("input_tokens", 0)
+            output_tokens = page_data.get("output_tokens", 0)
+            total_tokens = input_tokens + output_tokens
+            cost_inr = (input_tokens * INPUT_COST_PER_1M_INR / 1_000_000) + (output_tokens * OUTPUT_COST_PER_1M_INR / 1_000_000)
+            
             page_rows.append(
                 {
                     "Page": page_name,
                     "Page Views": page_data.get("page_views", 0),
                     "API Calls": page_data.get("api_calls", 0),
+                    "Input Tokens": f"{input_tokens:,}",
+                    "Output Tokens": f"{output_tokens:,}",
+                    "Total Tokens": f"{total_tokens:,}",
+                    "Cost (INR)": f"₹{cost_inr:.2f}",
                 }
             )
 
@@ -77,6 +106,7 @@ def _render_dashboard() -> None:
         st.info("No usage data captured yet.")
 
     st.caption(f"Last Updated (UTC): {metrics.get('last_updated', 'N/A')}")
+    st.caption(f"GPT-4o Pricing: ₹{INPUT_COST_PER_1M_INR:.2f} per 1M input tokens | ₹{OUTPUT_COST_PER_1M_INR:.2f} per 1M output tokens (USD to INR rate: {USD_TO_INR})")
 
     st.download_button(
         label="📥 Download Raw Usage JSON",

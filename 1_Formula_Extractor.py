@@ -674,7 +674,9 @@ AVAILABLE VARIABLES (reference only):
                     temperature=0.1,
                     top_p=0.95
                 )
-                track_api_call("Formula Extractor")
+                input_tokens = response.usage.prompt_tokens if response.usage else 0
+                output_tokens = response.usage.completion_tokens if response.usage else 0
+                track_api_call("Formula Extractor", input_tokens=input_tokens, output_tokens=output_tokens)
                 response_text = response.choices[0].message.content
                 parsed_formula = self._parse_stable_formula_response(response_text, formula_name)
                 if parsed_formula:

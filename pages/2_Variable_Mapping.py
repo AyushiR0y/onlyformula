@@ -394,7 +394,9 @@ class VariableHeaderMatcher:
                 temperature=0.0
             )
             
-            track_api_call("Variable Mapping")
+            input_tokens = response.usage.prompt_tokens if response.usage else 0
+            output_tokens = response.usage.completion_tokens if response.usage else 0
+            track_api_call("Variable Mapping", input_tokens=input_tokens, output_tokens=output_tokens)
             
             response_text = response.choices[0].message.content.strip()
             

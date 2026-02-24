@@ -22,6 +22,8 @@ def _default_metrics() -> Dict[str, Any]:
             "app_sessions": 0,
             "page_views_total": 0,
             "api_calls_total": 0,
+            "input_tokens_total": 0,
+            "output_tokens_total": 0,
         },
         "pages": {},
     }
@@ -60,6 +62,8 @@ def _ensure_page(metrics: Dict[str, Any], page_name: str) -> None:
         metrics["pages"][page_name] = {
             "page_views": 0,
             "api_calls": 0,
+            "input_tokens": 0,
+            "output_tokens": 0,
         }
 
 
@@ -95,14 +99,18 @@ def track_page_visit(page_name: str) -> None:
         print(f"[usage_tracker] Failed to track page visit: {e}")
 
 
-def track_api_call(page_name: str) -> None:
+def track_api_call(page_name: str, input_tokens: int = 0, output_tokens: int = 0) -> None:
     try:
         metrics = _load_metrics()
         _ensure_page(metrics, page_name)
         metrics["pages"][page_name]["api_calls"] += 1
+        metrics["pages"][page_name]["input_tokens"] = metrics["pages"][page_name].get("input_tokens", 0) + input_tokens
+        metrics["pages"][page_name]["output_tokens"] = metrics["pages"][page_name].get("output_tokens", 0) + output_tokens
         metrics["overall"]["api_calls_total"] = metrics["overall"].get("api_calls_total", 0) + 1
+        metrics["overall"]["input_tokens_total"] = metrics["overall"].get("input_tokens_total", 0) + input_tokens
+        metrics["overall"]["output_tokens_total"] = metrics["overall"].get("output_tokens_total", 0) + output_tokens
         _save_metrics(metrics)
-        print(f"[usage_tracker] API call tracked for '{page_name}' (total: {metrics['overall']['api_calls_total']})")
+        print(f"[usage_tracker] API call tracked for '{page_name}' (total: {metrics['overall']['api_calls_total']}, tokens: {input_tokens}in/{output_tokens}out)")
     except Exception as e:
         print(f"[usage_tracker] Failed to track API call: {e}")
 
