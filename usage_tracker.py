@@ -74,9 +74,11 @@ def _get_or_create_session(page_name: str) -> Dict[str, Any]:
         if session["session_id"] == session_id and session["page"] == page_name:
             return session
     
-    # Create new session
+    # Create new session with readable name
+    session_num = len(metrics["sessions"]) + 1
     session = {
-        "session_id": session_id,
+        "session_id": f"Session_{session_num}",
+        "uuid": session_id,
         "page": page_name,
         "started_at": _utc_now_iso(),
         "document_count": 0,
@@ -97,7 +99,7 @@ def track_page_visit(page_name: str) -> None:
     try:
         _ensure_session_id()
         session = _get_or_create_session(page_name)
-        print(f"[usage_tracker] Page '{page_name}' visited (session: {session['session_id'][:8]}...)")
+        print(f"[usage_tracker] Page '{page_name}' visited ({session['session_id']})")
     except Exception as e:
         print(f"[usage_tracker] Failed to track page visit: {e}")
 
@@ -108,10 +110,10 @@ def track_api_call(page_name: str, input_tokens: int = 0, output_tokens: int = 0
         session_id = _ensure_session_id()
         metrics = _load_metrics()
         
-        # Find the session
+        # Find the session by UUID (not session_id which is the display name)
         session = None
         for s in metrics["sessions"]:
-            if s["session_id"] == session_id and s["page"] == page_name:
+            if s["uuid"] == session_id and s["page"] == page_name:
                 session = s
                 break
         
@@ -143,7 +145,7 @@ def track_api_call(page_name: str, input_tokens: int = 0, output_tokens: int = 0
 
 
 def track_document_upload(page_name: str, count: int = 1) -> None:
-    """Track document uploads in a session."""
+    """Track document uploads in a session (only increment once per upload batch)."""
     try:
         session_id = _ensure_session_id()
         metrics = _load_metrics()
@@ -151,18 +153,20 @@ def track_document_upload(page_name: str, count: int = 1) -> None:
         # Find the session
         session = None
         for s in metrics["sessions"]:
-            if s["session_id"] == session_id and s["page"] == page_name:
+            if s["uuid"] == session_id and s["page"] == page_name:
                 session = s
                 break
         
         if not session:
             session = _get_or_create_session(page_name)
         
-        session["document_count"] = session.get("document_count", 0) + count
+        # Only increment if it's truly a new upload (not already counted)
+        prev_count = session.get("document_count", 0)
+        session["document_count"] = prev_count + count
         metrics["overall"]["total_documents"] = metrics["overall"].get("total_documents", 0) + count
         
         _save_metrics(metrics)
-        print(f"[usage_tracker] Uploaded {count} document(s) in session (total in session: {session['document_count']})")
+        print(f"[usage_tracker] Uploaded {count} document(s) to {page_name} (total in session: {session['document_count']})")
     except Exception as e:
         print(f"[usage_tracker] Failed to track document upload: {e}")
 

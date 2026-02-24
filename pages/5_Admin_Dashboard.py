@@ -42,8 +42,6 @@ def _show_login() -> None:
 
 
 def _render_dashboard() -> None:
-    track_page_visit("Admin Dashboard")
-
     st.title("📈 Admin Usage Dashboard")
 
     metrics = get_usage_metrics()
@@ -86,7 +84,7 @@ def _render_dashboard() -> None:
     if sessions:
         session_rows = []
         for session in sorted(sessions, key=lambda x: x["started_at"], reverse=True):
-            session_id = session["session_id"][:8]
+            session_id = session["session_id"]
             page = session["page"]
             started_at = session["started_at"]
             doc_count = session.get("document_count", 0)
@@ -98,9 +96,9 @@ def _render_dashboard() -> None:
             
             session_rows.append(
                 {
-                    "Session ID": session_id,
+                    "Session": session_id,
                     "Page": page,
-                    "Started At": started_at[:16],  # Show date and time only
+                    "Started": started_at[:16],  # Show date and time only
                     "Documents": doc_count,
                     "API Calls": api_calls,
                     "Input Tokens": f"{input_tokens:,}",
@@ -118,12 +116,12 @@ def _render_dashboard() -> None:
         
         selected_session_id = st.selectbox(
             "Select a session to view API call details:",
-            options=[s["session_id"][:8] for s in sessions],
-            format_func=lambda x: f"Session {x} ({next((s['page'] for s in sessions if s['session_id'].startswith(x)), 'Unknown')})"
+            options=[s["session_id"] for s in sessions],
+            format_func=lambda x: f"{x} ({next((s['page'] for s in sessions if s['session_id'] == x), 'Unknown')})"
         )
         
         if selected_session_id:
-            selected_session = next((s for s in sessions if s["session_id"].startswith(selected_session_id)), None)
+            selected_session = next((s for s in sessions if s["session_id"] == selected_session_id), None)
             if selected_session:
                 st.write(f"**Session {selected_session_id}** - {selected_session['page']}")
                 st.write(f"Started: {selected_session['started_at']}")

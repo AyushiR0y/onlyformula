@@ -1189,7 +1189,12 @@ def main():
         )
 
         if uploaded_files:
-            track_document_upload("Formula Extractor", count=len(uploaded_files))
+            # Track document upload only once per new file set
+            current_file_names = {uf.name for uf in uploaded_files}
+            if "last_uploaded_files_single" not in st.session_state or st.session_state.last_uploaded_files_single != current_file_names:
+                track_document_upload("Formula Extractor", count=len(uploaded_files))
+                st.session_state.last_uploaded_files_single = current_file_names
+            
             for uf in uploaded_files:
                 if uf.size > MAX_FILE_SIZE:
                     st.error(f"'{uf.name}' exceeds size limit.")
@@ -1280,6 +1285,15 @@ def main():
                         key=uf_key,
                         help="You can upload multiple files; they'll be merged for extraction"
                     )
+                    
+                    # Track document uploads only once per file set per variant
+                    if files:
+                        current_file_names = {uf.name for uf in files}
+                        session_key = f"last_uploaded_files_variant_{variant_idx}"
+                        if session_key not in st.session_state or st.session_state[session_key] != current_file_names:
+                            track_document_upload("Formula Extractor", count=len(files))
+                            st.session_state[session_key] = current_file_names
+                    
                     variant_files[variant_name] = files or []
                     if not files:
                         all_filled = False
@@ -1294,8 +1308,6 @@ def main():
             if not st.session_state.selected_output_variables:
                 st.warning("Please select at least one target formula.")
             else:
-                total_docs = sum(len(files) for files in variant_files.values())
-                track_document_upload("Formula Extractor", count=total_docs)
                 st.session_state.variant_results = {}
                 for v_name in st.session_state.variant_names[:num_variants]:
                     files = variant_files.get(v_name, [])
