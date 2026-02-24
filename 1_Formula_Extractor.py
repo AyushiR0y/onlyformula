@@ -18,7 +18,7 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_core.documents import Document
 import numpy as np
 from collections import defaultdict
-from usage_tracker import track_page_visit, track_api_call
+from usage_tracker import track_page_visit, track_api_call, track_document_upload
 
 
 load_dotenv()
@@ -676,7 +676,7 @@ AVAILABLE VARIABLES (reference only):
                 )
                 input_tokens = response.usage.prompt_tokens if response.usage else 0
                 output_tokens = response.usage.completion_tokens if response.usage else 0
-                track_api_call("Formula Extractor", input_tokens=input_tokens, output_tokens=output_tokens)
+                track_api_call("Formula Extractor", input_tokens=input_tokens, output_tokens=output_tokens, purpose="formula_extraction")
                 response_text = response.choices[0].message.content
                 parsed_formula = self._parse_stable_formula_response(response_text, formula_name)
                 if parsed_formula:
@@ -1189,6 +1189,7 @@ def main():
         )
 
         if uploaded_files:
+            track_document_upload("Formula Extractor", count=len(uploaded_files))
             for uf in uploaded_files:
                 if uf.size > MAX_FILE_SIZE:
                     st.error(f"'{uf.name}' exceeds size limit.")
@@ -1293,6 +1294,8 @@ def main():
             if not st.session_state.selected_output_variables:
                 st.warning("Please select at least one target formula.")
             else:
+                total_docs = sum(len(files) for files in variant_files.values())
+                track_document_upload("Formula Extractor", count=total_docs)
                 st.session_state.variant_results = {}
                 for v_name in st.session_state.variant_names[:num_variants]:
                     files = variant_files.get(v_name, [])
