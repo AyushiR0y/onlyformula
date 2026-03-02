@@ -506,49 +506,52 @@ class StableChunkedDocumentFormulaExtractor:
         return combined_text
 
     def _extract_formula_with_context(self, formula_name: str, context: str) -> Optional[ExtractedFormula]:
-        prompt = f"""You are a senior actuarial systems analyst with 15+ years of experience in life insurance product design, policy administration, and surrender value calculations. Your expertise includes GSV, SSV, paid-up benefits, maturity values, and terminal bonuses.
+        prompt = f"""Extract the calculation formula for "{formula_name}" from the document content.
 
-TARGET FORMULA: {formula_name}
+    DOCUMENT CONTENT:
+    {context}
 
-DOCUMENT CONTEXT:
-{context}
+    AVAILABLE VARIABLES:
+    {', '.join(self.input_variables.keys())}
 
-AVAILABLE INPUT VARIABLES:
-{', '.join(self.input_variables.keys())}
+    OBJECTIVE:
+    Return the best possible formula for "{formula_name}" using document evidence first and sound actuarial inference second.
 
-TASK:
-Extract or construct the formula for "{formula_name}" using this hierarchy:
+    DECISION ORDER (strict):
+    1. Use an explicit formula from the document if present.
+    2. If not explicit, infer from examples, tables, or nearby definitions.
+    3. If still unclear, construct an industry-standard approximation using available variables.
+    4. If uncertainty remains, return a safe placeholder formula for "{formula_name}" and mark evidence as INFERRED.
 
-1. PRIMARY: Look for explicit formulas in the document (tables, equations, worked examples)
-2. SECONDARY: If not explicit, reverse-engineer from numerical examples
-3. TERTIARY: If not found in document, construct a standard actuarial formula using available variables based on industry best practices
+    FORMULA RULES:
+    - You MUST return a formula; never return NOT_FOUND.
+    - Prefer variables from AVAILABLE VARIABLES and already-derived prior formulas.
+    - Preserve variable qualifiers exactly (example: *_ON_DEATH is distinct from base variable).
+    - Reuse canonical derived variables when present (example: use SSV, GSV, PAID_UP_SA_ON_DEATH) instead of expanding into long aliases.
+    - For comparisons in text such as "higher of"/"lower of", use MAX()/MIN().
+    - For conditional logic, set IS_CONDITIONAL to YES and provide CONDITIONS with branch expressions.
+    - Keep expressions implementation-friendly (plain math operators, MAX/MIN, parentheses).
+    - Do not invent unrelated variables; if a required factor is missing, use the closest available proxy and document inference.
 
-CONSTRUCTION GUIDELINES (when document doesn't specify):
-- GSV formulas: typically use total premiums paid × GSV_FACTOR
-- SSV formulas: often MAX of multiple components (SSV1, SSV2, SSV3) or use factors × benefit amounts
-- PAID_UP calculations: usually present_value calculations with sum assured and factors
-- SURRENDER amounts: typically MAX(GSV, SSV) or fund value based
-- Terminal Bonus: rate × duration × benefit_base
-- For conditionals: use MAX(), MIN(), or if-else based on policy terms
-- Prefer multiplicative factors over hardcoded values
-- Include time-based adjustments where relevant (years, policy duration)
+    DOMAIN HINTS (apply only when supported by context):
+    - Surrender paid amount is often max-type logic across GSV/SSV components.
+    - Total premium paid is typically derived from premium amount and paid premium count (and frequency factor if defined).
+    - Paid-up and death-benefit formulas often depend on correct death/non-death variants.
 
-OUTPUT FORMAT (strict, no extra text):
-DOCUMENT_EVIDENCE: [Exact quote if found, "CONSTRUCTED from actuarial principles" if inferred]
-IS_CONDITIONAL: [YES or NO]
-CONDITIONS: [If YES: "CONDITION_1: [condition] | EXPRESSION_1: [formula]"]
-FORMULA_EXPRESSION: [Mathematical expression using available variables]
-VARIABLES_USED: [Comma-separated variable names]
-BUSINESS_CONTEXT: [One precise sentence explaining the calculation]
-
-CRITICAL: Always provide a formula. Use your expertise to construct reasonable formulas even if document is vague.
-"""
+    RESPONSE FORMAT (strict, no extra text):
+    FORMULA_EXPRESSION: [mathematical expression]
+    IS_CONDITIONAL: [YES or NO]
+    CONDITIONS: [If YES, use: CONDITION_1: [condition] | EXPRESSION_1: [formula] ; CONDITION_2: ...]
+    VARIABLES_USED: [comma-separated variables used]
+    DOCUMENT_EVIDENCE: [exact supporting text, or INFERRED]
+    BUSINESS_CONTEXT: [brief explanation of what this formula calculates]
+    """
 
         try:
             response = client.chat.completions.create(
                 model=DEPLOYMENT_NAME,
                 messages=[
-                    {"role": "system", "content": "You are a senior actuarial analyst specialized in insurance policy calculations. You extract formulas from documents and construct industry-standard formulas when needed. Never return 'not found' - always provide a working formula."},
+                    {"role": "system", "content": "You are an actuarial formula extraction engine. Prioritize explicit document formulas, then infer conservatively. Always return a usable formula and machine-parseable output in the required format."},
                     {"role": "user", "content": prompt}
                 ],
                 max_tokens=800,
