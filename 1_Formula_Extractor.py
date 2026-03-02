@@ -506,39 +506,53 @@ class StableChunkedDocumentFormulaExtractor:
         return combined_text
 
     def _extract_formula_with_context(self, formula_name: str, context: str) -> Optional[ExtractedFormula]:
-        prompt = f"""Extract the formula for "{formula_name}" from this insurance document.
+        prompt = f"""You are a senior actuarial systems analyst with 15+ years of experience in life insurance product design, policy administration, and surrender value calculations. Your expertise includes GSV, SSV, paid-up benefits, maturity values, and terminal bonuses.
+
+TARGET FORMULA: {formula_name}
 
 DOCUMENT CONTEXT:
 {context}
 
-AVAILABLE VARIABLES:
+AVAILABLE INPUT VARIABLES:
 {', '.join(self.input_variables.keys())}
 
-EXTRACTION RULES:
-1. Find explicit formulas (equations, tables, or worked examples with numbers)
-2. If examples exist, reverse-engineer the pattern (e.g., "100000 * 0.9 * 5" → "TOTAL_PREMIUM * GSV_FACTOR * years")
-3. Use ONLY variables from the available list above
-4. For conditionals (if/then, tiers, MAX/MIN), capture ALL branches
-5. If formula not found, return "NOT_FOUND"
+TASK:
+Extract or construct the formula for "{formula_name}" using this hierarchy:
 
-OUTPUT FORMAT (strict):
-DOCUMENT_EVIDENCE: [Verbatim quote or "NOT_FOUND"]
+1. PRIMARY: Look for explicit formulas in the document (tables, equations, worked examples)
+2. SECONDARY: If not explicit, reverse-engineer from numerical examples
+3. TERTIARY: If not found in document, construct a standard actuarial formula using available variables based on industry best practices
+
+CONSTRUCTION GUIDELINES (when document doesn't specify):
+- GSV formulas: typically use total premiums paid × GSV_FACTOR
+- SSV formulas: often MAX of multiple components (SSV1, SSV2, SSV3) or use factors × benefit amounts
+- PAID_UP calculations: usually present_value calculations with sum assured and factors
+- SURRENDER amounts: typically MAX(GSV, SSV) or fund value based
+- Terminal Bonus: rate × duration × benefit_base
+- For conditionals: use MAX(), MIN(), or if-else based on policy terms
+- Prefer multiplicative factors over hardcoded values
+- Include time-based adjustments where relevant (years, policy duration)
+
+OUTPUT FORMAT (strict, no extra text):
+DOCUMENT_EVIDENCE: [Exact quote if found, "CONSTRUCTED from actuarial principles" if inferred]
 IS_CONDITIONAL: [YES or NO]
-CONDITIONS: [If YES: "CONDITION_1: [text] | EXPRESSION_1: [formula]" etc.]
-FORMULA_EXPRESSION: [Math expression or "NOT_FOUND"]
-VARIABLES_USED: [Comma-separated list]
-BUSINESS_CONTEXT: [One sentence or "Not found"]
+CONDITIONS: [If YES: "CONDITION_1: [condition] | EXPRESSION_1: [formula]"]
+FORMULA_EXPRESSION: [Mathematical expression using available variables]
+VARIABLES_USED: [Comma-separated variable names]
+BUSINESS_CONTEXT: [One precise sentence explaining the calculation]
+
+CRITICAL: Always provide a formula. Use your expertise to construct reasonable formulas even if document is vague.
 """
 
         try:
             response = client.chat.completions.create(
                 model=DEPLOYMENT_NAME,
                 messages=[
-                    {"role": "system", "content": "You are a precise formula extraction assistant. Extract formulas exactly as documented. Return NOT_FOUND if a formula is not present in the document."},
+                    {"role": "system", "content": "You are a senior actuarial analyst specialized in insurance policy calculations. You extract formulas from documents and construct industry-standard formulas when needed. Never return 'not found' - always provide a working formula."},
                     {"role": "user", "content": prompt}
                 ],
                 max_tokens=800,
-                temperature=0.0,
+                temperature=0.2,
                 top_p=1.0
             )
             input_tokens = response.usage.prompt_tokens if response.usage else 0
@@ -551,11 +565,12 @@ BUSINESS_CONTEXT: [One sentence or "Not found"]
             if parsed_formula:
                 return parsed_formula
             else:
-                # Model returned NOT_FOUND or unparseable, try offline
+                # Parsing failed, try offline as last resort
+                st.warning(f"⚠️ Could not parse AI response for {formula_name}")
                 offline_result = self._extract_formula_offline(formula_name, context)
                 if offline_result:
                     return offline_result
-                return self._create_placeholder_formula(formula_name, "Not found in document")
+                return self._create_placeholder_formula(formula_name, "AI parsing failed")
 
         except Exception as e:
             error_msg = str(e)
@@ -586,15 +601,10 @@ BUSINESS_CONTEXT: [One sentence or "Not found"]
 
     def _parse_stable_formula_response(self, response_text: str, formula_name: str) -> Optional[ExtractedFormula]:
         try:
-            # Check for NOT_FOUND first
-            if "NOT_FOUND" in response_text.upper() and "FORMULA_EXPRESSION:" in response_text.upper():
-                formula_check = re.search(r'FORMULA_EXPRESSION:\s*(.+?)(?=\n|$)', response_text, re.IGNORECASE)
-                if formula_check and "NOT_FOUND" in formula_check.group(1).upper():
-                    return None
-            
             formula_match = re.search(r'FORMULA_EXPRESSION:\s*(.+?)(?=\nIS_CONDITIONAL|\nVARIABLES_USED|\nBUSINESS_CONTEXT|$)', response_text, re.DOTALL | re.IGNORECASE)
             formula_expression = formula_match.group(1).strip() if formula_match else None
             
+            # Only return None if explicitly NOT_FOUND (shouldn't happen with new prompt)
             if not formula_expression or formula_expression.upper() == "NOT_FOUND":
                 return None
 
@@ -616,18 +626,24 @@ BUSINESS_CONTEXT: [One sentence or "Not found"]
             specific_variables = self._parse_variables_stable(variables_str)
 
             evidence_match = re.search(r'DOCUMENT_EVIDENCE:\s*(.+?)(?=\n[A-Z_]+:|$)', response_text, re.DOTALL | re.IGNORECASE)
-            document_evidence = evidence_match.group(1).strip() if evidence_match else "No supporting evidence"
+            document_evidence = evidence_match.group(1).strip() if evidence_match else "Constructed formula"
 
             context_match = re.search(r'BUSINESS_CONTEXT:\s*(.+?)(?=\n[A-Z_]+:|$)', response_text, re.DOTALL | re.IGNORECASE)
             business_context = context_match.group(1).strip() if context_match else f"Calculation for {formula_name}"
+            
+            # Determine source method based on evidence
+            if "CONSTRUCTED" in document_evidence.upper() or "INFERRED" in document_evidence.upper():
+                source_method = "ai_constructed"
+            else:
+                source_method = "ai_extracted"
 
             return ExtractedFormula(
                 formula_name=formula_name.upper(),
                 formula_expression=formula_expression,
-                variants_info="Extracted using AI",
+                variants_info="AI-powered extraction with expert knowledge",
                 business_context=business_context,
-                source_method='ai_extraction',
-                document_evidence=document_evidence[:500] if document_evidence else "No evidence",
+                source_method=source_method,
+                document_evidence=document_evidence[:500] if document_evidence else "Constructed by AI",
                 specific_variables=specific_variables,
                 is_conditional=is_conditional,
                 conditions=conditions,
