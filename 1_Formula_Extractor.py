@@ -526,17 +526,31 @@ class StableChunkedDocumentFormulaExtractor:
     FORMULA RULES:
     - You MUST return a formula; never return NOT_FOUND.
     - Prefer variables from AVAILABLE VARIABLES and already-derived prior formulas.
+    - When possible, reuse previously derived variables directly (for example SSV, GSV, PAID_UP_SA_ON_DEATH) instead of re-expanding all sub-components.
     - Preserve variable qualifiers exactly (example: *_ON_DEATH is distinct from base variable).
-    - Reuse canonical derived variables when present (example: use SSV, GSV, PAID_UP_SA_ON_DEATH) instead of expanding into long aliases.
     - For comparisons in text such as "higher of"/"lower of", use MAX()/MIN().
     - For conditional logic, set IS_CONDITIONAL to YES and provide CONDITIONS with branch expressions.
     - Keep expressions implementation-friendly (plain math operators, MAX/MIN, parentheses).
     - Do not invent unrelated variables; if a required factor is missing, use the closest available proxy and document inference.
+    - If document language implies present value discounting, preserve exponent form as written (example: (1/1.05)^N).
 
     DOMAIN HINTS (apply only when supported by context):
     - Surrender paid amount is often max-type logic across GSV/SSV components.
     - Total premium paid is typically derived from premium amount and paid premium count (and frequency factor if defined).
     - Paid-up and death-benefit formulas often depend on correct death/non-death variants.
+    - If the requested formula is PAID_UP_SA_ON_DEATH, prefer SUM_ASSURED_ON_DEATH-based logic (not SUM_ASSURED unless explicitly stated).
+    - Distinguish PAID_UP_INCOME_INSTALLMENT from Income_Benefit_Amount; installment is usually amount × frequency, then adjusted per policy terms when specified.
+
+    INFERENCE EXAMPLES (use only when context matches):
+    - "surrender value is higher of GSV or SSV" -> MAX(GSV, SSV)
+    - "GSV factor applied to total premiums paid" -> GSV_FACTOR * TOTAL_PREMIUM_PAID
+    - "sum assured on death is higher of A, B, C" -> MAX(A, B, C)
+    - If SSV is already derived, use SSV directly in downstream formulas instead of rebuilding SSV internals.
+
+    QUALITY CHECK BEFORE RESPONDING:
+    - Confirm the formula directly corresponds to "{formula_name}".
+    - Confirm variable names exactly match available or previously derived names.
+    - If inferred, return DOCUMENT_EVIDENCE as INFERRED and still provide a concrete formula.
 
     RESPONSE FORMAT (strict, no extra text):
     FORMULA_EXPRESSION: [mathematical expression]
@@ -1264,11 +1278,7 @@ def main():
         with col_stat4:
             st.metric("Target Variables", len(st.session_state.selected_output_variables))
 
-        tab_view, tab_edit = st.tabs(["👁️ View", "✏️ Edit"])
-
-        with tab_view:
-            for formula in formulas:
-                render_formula_card(formula)
+        tab_edit, tab_detailed = st.tabs(["✏️ Edit", "👁️ Detailed"])
 
         with tab_edit:
             col_header1, col_header2, col_header3 = st.columns([3, 5, 2])
@@ -1334,6 +1344,10 @@ def main():
                         st.session_state.formulas.append({"formula_name": new_formula_name.strip(), "formula_expression": new_formula_expression.strip()})
                         st.session_state.formulas_saved = False
                         st.rerun()
+
+        with tab_detailed:
+            for formula in formulas:
+                render_formula_card(formula)
 
         st.markdown("---")
         st.markdown("""<div style="background: #e8f4f8; padding: 10px 16px; border-radius: 6px; border-left: 3px solid #2196f3;">
