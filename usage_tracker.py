@@ -102,14 +102,10 @@ def _get_or_create_session(page_name: str, validate_by_documents: bool = False) 
 
 
 def track_page_visit(page_name: str) -> None:
-    """Track a page visit and ensure session ID exists.
-    
-    Note: Does NOT create a session record. Session records are only created
-    when documents are uploaded. This prevents counting sessions without uploads.
-    """
+    """Track a page visit and ensure a session record exists."""
     try:
-        _ensure_session_id()
-        print(f"[usage_tracker] Page '{page_name}' visited - session ID ensured")
+        _get_or_create_session(page_name)
+        print(f"[usage_tracker] Page '{page_name}' visited - session recorded")
     except Exception as e:
         print(f"[usage_tracker] Failed to track page visit: {e}")
 
@@ -176,14 +172,12 @@ def track_document_upload(page_name: str, count: int = 1) -> None:
         if not session:
             session = _get_or_create_session(page_name, validate_by_documents=True)
         
-        # Only increment if it's the first upload (marking session as valid/countable)
+        # Increment document count for this session
         prev_count = session.get("document_count", 0)
         session["document_count"] = prev_count + count
-        
-        # Only increment total_sessions if this is the first document in this session
-        if prev_count == 0:
-            metrics["overall"]["total_sessions"] = metrics["overall"].get("total_sessions", 0) + 1
-            
+
+        # Keep session totals consistent with stored sessions
+        metrics["overall"]["total_sessions"] = len(metrics.get("sessions", []))
         metrics["overall"]["total_documents"] = metrics["overall"].get("total_documents", 0) + count
         
         _save_metrics(metrics)

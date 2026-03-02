@@ -82,11 +82,12 @@ def _render_dashboard() -> None:
     st.subheader("Per Session Breakdown")
 
     if sessions:
+        sorted_sessions = sorted(sessions, key=lambda x: x.get("started_at", ""), reverse=True)
         session_rows = []
-        for session in sorted(sessions, key=lambda x: x["started_at"], reverse=True):
-            session_id = session["session_id"]
-            page = session["page"]
-            started_at = session["started_at"]
+        for session in sorted_sessions:
+            session_id = session.get("session_id", session.get("uuid", "Unknown"))
+            page = session.get("page", "Unknown")
+            started_at = session.get("started_at", "")
             doc_count = session.get("document_count", 0)
             api_calls = len(session.get("api_calls", []))
             input_tokens = session.get("input_tokens_total", 0)
@@ -98,7 +99,7 @@ def _render_dashboard() -> None:
                 {
                     "Session": session_id,
                     "Page": page,
-                    "Started": started_at[:16],  # Show date and time only
+                    "Started": started_at[:16] if started_at else "-",
                     "Documents": doc_count,
                     "API Calls": api_calls,
                     "Input Tokens": f"{input_tokens:,}",
@@ -116,22 +117,22 @@ def _render_dashboard() -> None:
         
         selected_session_id = st.selectbox(
             "Select a session to view API call details:",
-            options=[s["session_id"] for s in sessions],
-            format_func=lambda x: f"{x} ({next((s['page'] for s in sessions if s['session_id'] == x), 'Unknown')})"
+            options=[s.get("session_id", s.get("uuid", "Unknown")) for s in sorted_sessions],
+            format_func=lambda x: f"{x} ({next((s.get('page', 'Unknown') for s in sorted_sessions if s.get('session_id', s.get('uuid', 'Unknown')) == x), 'Unknown')})"
         )
         
         if selected_session_id:
-            selected_session = next((s for s in sessions if s["session_id"] == selected_session_id), None)
+            selected_session = next((s for s in sorted_sessions if s.get("session_id", s.get("uuid", "Unknown")) == selected_session_id), None)
             if selected_session:
-                st.write(f"**Session {selected_session_id}** - {selected_session['page']}")
-                st.write(f"Started: {selected_session['started_at']}")
+                st.write(f"**Session {selected_session_id}** - {selected_session.get('page', 'Unknown')}")
+                st.write(f"Started: {selected_session.get('started_at', '-')}")
                 st.write(f"Documents uploaded: {selected_session.get('document_count', 0)}")
                 
                 api_calls = selected_session.get("api_calls", [])
                 if api_calls:
                     call_rows = []
                     for i, call in enumerate(api_calls, 1):
-                        timestamp = call["timestamp"][:19]  # Show date and time
+                        timestamp = call.get("timestamp", "")[:19] if call.get("timestamp") else "-"
                         in_tokens = call.get("input_tokens", 0)
                         out_tokens = call.get("output_tokens", 0)
                         purpose = call.get("purpose", "general")
@@ -181,12 +182,12 @@ def _render_dashboard() -> None:
     if sessions:
         st.info("ℹ️ Select sessions below to remove them from metrics (they won't be counted).")
         
-        for idx, session in enumerate(sorted(sessions, key=lambda x: x["started_at"], reverse=True)):
+        for idx, session in enumerate(sorted_sessions):
             col_session, col_delete = st.columns([4, 1])
             
             session_display = (
-                f"{session['session_id']} | {session['page']} | "
-                f"Started: {session['started_at'][:16]} | "
+                f"{session.get('session_id', session.get('uuid', 'Unknown'))} | {session.get('page', 'Unknown')} | "
+                f"Started: {(session.get('started_at', '')[:16] if session.get('started_at') else '-')} | "
                 f"Docs: {session.get('document_count', 0)} | "
                 f"API Calls: {len(session.get('api_calls', []))}"
             )
@@ -195,32 +196,32 @@ def _render_dashboard() -> None:
                 st.text(session_display)
             
             with col_delete:
-                if st.button("🗑️ Delete", key=f"delete_session_{idx}_{session['uuid'][:8]}", use_container_width=True):
+                if st.button("🗑️ Delete", key=f"delete_session_{idx}_{session.get('uuid', 'nouuid')[:8]}", use_container_width=True):
                     # Show confirmation
-                    st.session_state[f"delete_confirm_{session['uuid']}"] = True
+                    st.session_state[f"delete_confirm_{session.get('uuid', 'nouuid')}"] = True
             
             # Show confirmation for this session
-            if st.session_state.get(f"delete_confirm_{session['uuid']}", False):
+            if st.session_state.get(f"delete_confirm_{session.get('uuid', 'nouuid')}", False):
                 col_confirm_del, col_cancel_del = st.columns(2)
                 with col_confirm_del:
                     if st.button(
                         "✅ Confirm Delete",
-                        key=f"confirm_del_{session['uuid'][:8]}",
+                        key=f"confirm_del_{session.get('uuid', 'nouuid')[:8]}",
                         type="primary",
                         use_container_width=True
                     ):
-                        delete_session(session["uuid"], session["page"])
-                        st.session_state[f"delete_confirm_{session['uuid']}"] = False
-                        st.success(f"✅ Session {session['session_id']} deleted.")
+                        delete_session(session.get("uuid", ""), session.get("page", ""))
+                        st.session_state[f"delete_confirm_{session.get('uuid', 'nouuid')}"] = False
+                        st.success(f"✅ Session {session.get('session_id', session.get('uuid', 'Unknown'))} deleted.")
                         st.rerun()
                 
                 with col_cancel_del:
                     if st.button(
                         "❌ Cancel",
-                        key=f"cancel_del_{session['uuid'][:8]}",
+                        key=f"cancel_del_{session.get('uuid', 'nouuid')[:8]}",
                         use_container_width=True
                     ):
-                        st.session_state[f"delete_confirm_{session['uuid']}"] = False
+                        st.session_state[f"delete_confirm_{session.get('uuid', 'nouuid')}"] = False
                         st.rerun()
 
     st.markdown("---")
